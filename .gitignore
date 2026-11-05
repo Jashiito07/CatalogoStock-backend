@@ -1,0 +1,25 @@
+# Dependencias y compilación
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Secretos: nunca subir variables de entorno reales
+.env
+.env.*
+!.env.example
+
+# Comprobantes y archivos privados (RNF-04, PA-13)
+almacenamiento/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
