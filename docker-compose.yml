@@ -1,0 +1,25 @@
+# PostgreSQL 17 SOLO para desarrollo local.
+# Lee BD_NOMBRE, BD_USUARIO, BD_CLAVE y BD_PUERTO del archivo .env (ver .env.example).
+# Uso: docker compose up -d
+services:
+  postgres:
+    image: postgres:17
+    container_name: catalogostock-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${BD_NOMBRE:?Defina BD_NOMBRE en .env}
+      POSTGRES_USER: ${BD_USUARIO:?Defina BD_USUARIO en .env}
+      POSTGRES_PASSWORD: ${BD_CLAVE:?Defina BD_CLAVE en .env}
+    ports:
+      # Solo accesible desde el propio equipo.
+      - '127.0.0.1:${BD_PUERTO:-5432}:5432'
+    volumes:
+      - datos-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  datos-postgres:
