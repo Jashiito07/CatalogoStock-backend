@@ -51,6 +51,10 @@ inválida, la API no inicia y el error solo nombra la variable, nunca su valor.
 | `BD_USUARIO` | Usuario de PostgreSQL | `catalogostock_usuario` |
 | `BD_CLAVE` | Clave de PostgreSQL | `cambie_esta_clave_falsa` |
 | `BCRYPT_COSTO` | Opcional. Costo de bcrypt para las claves (10 a 14; por defecto 12, D-08) | `12` |
+| `JWT_SECRETO` | Secreto de firma de los tokens de acceso (JWT HS256). Mínimo 32 caracteres aleatorios | ver `.env.example` |
+| `JWT_VIDA_ACCESO_SEGUNDOS` | Opcional. Vida del token de acceso (60 a 3600; por defecto 900 = 15 min, D-09) | `900` |
+| `RENOVACION_VIDA_DIAS` | Opcional. Vida del token de renovación (1 a 30; por defecto 7, D-09) | `7` |
+| `PROXY_SALTOS_CONFIABLES` | Opcional. Proxies de confianza delante de la API (`trust proxy`; 0 a 5, por defecto 0). En producción detrás de un proxy TLS: `1` (D-17) | `0` |
 | `VENDEDOR_NOMBRE`, `VENDEDOR_CORREO`, `VENDEDOR_TELEFONO`, `VENDEDOR_CLAVE` | Solo para `npm run crear-vendedor`; la API no las usa | ver `.env.example` |
 
 ## Comandos
@@ -63,7 +67,7 @@ inválida, la API no inicia y el error solo nombra la variable, nunca su valor.
 | `npm run lint` | oxlint (`.oxlintrc.json`); los avisos también hacen fallar |
 | `npm test` | Pruebas unitarias (`src/**/*.spec.ts`) |
 | `npm run test:cov` | Unitarias con cobertura (mínimo 70 % en `dominio`, RNF-15) |
-| `npm run test:e2e` | Pruebas e2e (`test/**/*.e2e-spec.ts`) |
+| `npm run test:e2e` | Pruebas e2e (`test/**/*.e2e-spec.ts`) contra `catalogostock_pruebas` (ver «Pruebas e2e») |
 | `npm run migracion:generar -- src/migraciones/<Nombre>` | Compila y genera una migración comparando entidades y base |
 | `npm run migracion:ejecutar` | Compila y aplica las migraciones pendientes |
 | `npm run migracion:revertir` | Compila y revierte la última migración |
@@ -95,6 +99,71 @@ Las migraciones usan `src/configuracion/fuente-datos.ts` (compilado en
 `dist/configuracion/fuente-datos.js`), que lee `.env`. `synchronize` está desactivado
 siempre: el esquema cambia **solo** con migraciones, y cada una implementa `down()`.
 
+Migraciones actuales: `CrearTablaUsuarios` (1.2) y `CrearTablaSesiones` (1.3).
+
+## Pruebas e2e (base `catalogostock_pruebas`, D-23)
+
+Las pruebas e2e levantan la API completa contra una base **local y exclusiva de
+pruebas**, nunca la de desarrollo ni la de producción.
+
+1. Cree la base una sola vez, con un usuario que pueda crear bases (por ejemplo
+   `postgres`), desde pgAdmin o `psql`, y désela al usuario de la API:
+
+   ```sql
+   CREATE DATABASE catalogostock_pruebas OWNER catalogostock_usuario;
+   ```
+
+   Con el PostgreSQL de `docker-compose.yml` (su usuario es superusuario):
+
+   ```bash
+   docker compose exec postgres psql -U <BD_USUARIO> -d <BD_NOMBRE> -c "CREATE DATABASE catalogostock_pruebas"
+   ```
+
+2. Copie `.env.pruebas.example` como `.env.pruebas` (está en `.gitignore`) y complete
+   `BD_HOST`, `BD_PUERTO`, `BD_NOMBRE`, `BD_USUARIO` y `BD_CLAVE`.
+3. Ejecute `npm run test:e2e`.
+
+Cómo funciona (`vitest.config.e2e.ts` y `test/preparacion/`):
+
+- La conexión sale **solo** de `.env.pruebas`; nunca de `.env` ni de las variables `BD_*`
+  de la terminal. El resto (`JWT_SECRETO`, `BCRYPT_COSTO=10`…) son valores falsos fijos.
+- Si `BD_NOMBRE` no termina en `_pruebas`, las pruebas **abortan** antes de conectarse.
+  Se vuelve a comprobar con `current_database()` antes de migrar y antes de cada limpieza.
+- Antes de empezar, `preparacion-global.ts` **borra el esquema** de esa base y aplica todas
+  las migraciones de `src/migraciones/` desde cero.
+- Antes de cada prueba se vacían todas las tablas (salvo `migraciones`) y se reinicia el
+  contador del límite de intentos. Las suites se ejecutan una a la vez.
+- Si falta `.env.pruebas`, `npm run test:e2e` falla con un mensaje que indica qué hacer.
+
+## Registro, sesión y aviso de privacidad (subfase 1.3)
+
+Contrato completo en `docs/contrato-api/usuarios.md` (RF-USU-01, CA-01, D-09, D-19).
+
+| Ruta | Acceso | Límite por IP (D-17) |
+|---|---|---|
+| `GET /api/v1/privacidad/aviso` | Público | — |
+| `POST /api/v1/usuarios/registro` | Público; siempre crea un Cliente, sin sesión | 3 por minuto |
+| `POST /api/v1/autenticacion/ingreso/cliente` | Público; solo Clientes (canal `APP`) | 5 por minuto, sumando las dos rutas de ingreso |
+| `POST /api/v1/autenticacion/ingreso/vendedor` | Público; solo el Vendedor (canal `PANEL`) | (el mismo contador) |
+| `POST /api/v1/autenticacion/renovacion` | Con el token de renovación | 10 por minuto |
+| `POST /api/v1/autenticacion/salida` | `Authorization: Bearer <tokenAcceso>` | — |
+
+- Token de acceso: JWT HS256 de 15 minutos con `sub`, `rol`, `iat` y `exp`.
+- Token de renovación: 256 bits aleatorios (no es JWT), 7 días y un solo uso. En la tabla
+  `sesiones` se guarda solo su hash SHA-256, con el canal, la familia de rotación y las
+  fechas de vencimiento y revocación.
+- Reutilizar un token ya rotado revoca toda su familia (401 `TOKEN_INVALIDO`).
+- Con el rol equivocado en un canal, la respuesta es la misma que con una clave incorrecta
+  (401 `CREDENCIALES_INVALIDAS`) y no se crea sesión.
+- Al superar un límite: 429 `DEMASIADAS_SOLICITUDES` con la cabecera `Retry-After`. El
+  contador vive en la memoria del proceso.
+- El aviso de privacidad es un **borrador provisional** (D-15) en
+  `src/modulos/usuarios/infraestructura/privacidad/aviso-privacidad.provisional.ts`. Si
+  cambia el texto, cambie también `version`.
+- La protección por rol (`@Publico()`, `@Roles()`), `GET /usuarios/yo` y la bitácora
+  llegan en las subfases 1.4 y 1.5. Los puntos donde se registrará la bitácora están
+  marcados con `PENDIENTE (subfase 1.5)`.
+
 ## Estructura
 
 ```text
@@ -103,7 +172,8 @@ src/
   app.module.ts                   Importa configuración, base de datos y módulos
   configuracion/
     variables-entorno.ts          Validación de variables al arrancar
-    aplicacion-http.ts            Prefijo /api/v1, helmet, CORS, ValidationPipe, filtro de errores
+    aplicacion-http.ts            Prefijo /api/v1, helmet, CORS, trust proxy, ValidationPipe, filtro de errores
+    limite-intentos.module.ts     @nestjs/throttler con su guard global (D-17)
     base-datos.config.ts          Opciones de PostgreSQL (synchronize: false)
     base-datos.module.ts          TypeORM con autoLoadEntities e inicialización manual
     conexion-base-datos.servicio.ts  Conexión en segundo plano con reintentos
@@ -112,14 +182,18 @@ src/
     dominio/                      Dinero (centavos exactos) y errores de dominio base
     aplicacion/                   Puertos compartidos (Reloj, GeneradorId)
     infraestructura/              Adaptadores compartidos (RelojSistema, GeneradorIdUuid)
-    presentacion/                 Filtro global de errores y ValidationPipe
+    presentacion/                 Filtro global de errores, ValidationPipe y límite de intentos
   comandos/
     crear-vendedor.ts             Punto de entrada de `npm run crear-vendedor` (contexto sin HTTP)
   modulos/
     usuarios/
-      dominio/                    Usuario, Correo, Telefono, NombreUsuario, Rol, regla de clave
-      aplicacion/                 CrearVendedorCasoUso y puertos UsuarioRepositorio, GeneradorHash
-      infraestructura/            Tabla usuarios (TypeORM) y GeneradorHashBcrypt (costo 12)
+      dominio/                    Usuario, Correo, Telefono, NombreUsuario, Rol, regla de clave,
+                                  Sesion, Canal, aviso de privacidad y errores de autenticación
+      aplicacion/                 Casos de uso CrearVendedor, RegistrarCliente, IniciarSesion,
+                                  RenovarSesion, CerrarSesion, ConsultarAvisoPrivacidad y sus puertos
+      infraestructura/            Tablas usuarios y sesiones (TypeORM), bcrypt, JWT,
+                                  token de renovación (node:crypto) y aviso provisional
+      presentacion/http/          Controladores, DTOs y GuardTokenAcceso
       presentacion/cli/           Lógica del comando crear-vendedor
       usuarios.module.ts
       index.ts                    API pública del módulo
@@ -132,6 +206,7 @@ src/
       index.ts                    API pública del módulo
   migraciones/                    Migraciones de TypeORM
 test/                             Pruebas e2e
+  preparacion/                    Entorno, migraciones y limpieza de catalogostock_pruebas
 ```
 
 Módulos previstos: `usuarios`, `productos`, `inventario`, `catalogo`, `pedidos`, `pagos`,
@@ -156,8 +231,11 @@ infraestructura┘
 
 - Prefijo de rutas `/api/v1`; JSON en `camelCase`; tablas y columnas en `snake_case`.
 - Errores con el formato `{ "codigo", "mensaje", "detalles" }`: `DATOS_INVALIDOS` (400),
-  `NO_AUTENTICADO` (401), `NO_AUTORIZADO` (403), `NO_ENCONTRADO` (404), `ERROR_INTERNO`
-  (500, sin detalles internos). Los errores de dominio se traducen según su categoría.
+  `NO_AUTENTICADO`, `TOKEN_VENCIDO`, `TOKEN_INVALIDO`, `CREDENCIALES_INVALIDAS` (401),
+  `NO_AUTORIZADO` (403), `NO_ENCONTRADO` (404), conflictos como `CORREO_YA_REGISTRADO`
+  (409), reglas como `PRIVACIDAD_NO_ACEPTADA` (422), `DEMASIADAS_SOLICITUDES` (429) y
+  `ERROR_INTERNO` (500, sin detalles internos). Los errores de dominio se traducen según
+  su categoría.
 - Dinero: `numeric(12,2)` en PostgreSQL, objeto `Dinero` en centavos (`bigint`) en el
   código y texto decimal con dos decimales en la API (`"12.50"`). Nunca `number`.
 - `ValidationPipe` global con `whitelist`, `forbidNonWhitelisted` y `transform`.

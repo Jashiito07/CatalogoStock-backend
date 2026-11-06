@@ -16,6 +16,11 @@ async function iniciar(): Promise<void> {
   configurarAplicacionHttp(
     app,
     obtenerOrigenesCors(configuracion.get('CORS_ORIGENES', { infer: true })),
+    {
+      saltosProxyConfiables: configuracion.get('PROXY_SALTOS_CONFIABLES', {
+        infer: true,
+      }),
+    },
   );
   // Cierra la conexión con PostgreSQL al detener el proceso.
   app.enableShutdownHooks();
