@@ -3,11 +3,15 @@ import { plainToInstance, Type } from 'class-transformer';
 import {
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Max,
   Min,
   validateSync,
 } from 'class-validator';
+
+/** Costo de bcrypt por defecto (D-08, contrato de usuarios). */
+export const COSTO_BCRYPT = 12;
 
 /**
  * Variables de entorno obligatorias de la API.
@@ -50,6 +54,18 @@ export class VariablesEntorno {
   @IsString()
   @IsNotEmpty({ message: 'BD_CLAVE es obligatoria' })
   BD_CLAVE!: string;
+
+  /**
+   * Costo de bcrypt para el hash de las claves (D-08, contrato de usuarios).
+   * Opcional: si no se define vale 12. Se limita a 10–14 para que un error de
+   * configuración no debilite el hash ni vuelva lentísimo el ingreso.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'BCRYPT_COSTO debe ser un número entero' })
+  @Min(10)
+  @Max(14)
+  BCRYPT_COSTO: number = COSTO_BCRYPT;
 }
 
 /**

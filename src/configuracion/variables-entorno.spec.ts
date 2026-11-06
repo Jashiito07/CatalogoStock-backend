@@ -43,6 +43,28 @@ describe('Configuración: validación de variables de entorno al arrancar', () =
     ).toThrow(nombre);
   });
 
+  it('D-08: BCRYPT_COSTO es opcional y vale 12 si no se define', () => {
+    expect(validarVariablesEntorno({ ...VARIABLES_VALIDAS }).BCRYPT_COSTO).toBe(
+      12,
+    );
+  });
+
+  it('D-08: BCRYPT_COSTO acepta un entero de 10 a 14', () => {
+    expect(
+      validarVariablesEntorno({ ...VARIABLES_VALIDAS, BCRYPT_COSTO: '10' })
+        .BCRYPT_COSTO,
+    ).toBe(10);
+  });
+
+  it.each(['9', '15', 'doce', '12.5'])(
+    'D-08: BCRYPT_COSTO rechaza el valor "%s"',
+    (valor) => {
+      expect(() =>
+        validarVariablesEntorno({ ...VARIABLES_VALIDAS, BCRYPT_COSTO: valor }),
+      ).toThrow('BCRYPT_COSTO');
+    },
+  );
+
   it('el error no expone el valor de los secretos', () => {
     let mensaje = '';
     try {

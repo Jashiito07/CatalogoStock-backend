@@ -36,7 +36,8 @@ Compruebe: `GET http://localhost:3000/api/v1/salud`
 
 ## Variables de entorno
 
-Todas son obligatorias y están documentadas con valores falsos en `.env.example`.
+Salvo las indicadas como opcionales, todas son obligatorias y están documentadas con
+valores falsos en `.env.example`.
 Se validan al arrancar (`src/configuracion/variables-entorno.ts`): si falta alguna o es
 inválida, la API no inicia y el error solo nombra la variable, nunca su valor.
 
@@ -49,6 +50,8 @@ inválida, la API no inicia y el error solo nombra la variable, nunca su valor.
 | `BD_NOMBRE` | Base de datos (las pruebas e2e usan el sufijo `_pruebas`) | `catalogostock` |
 | `BD_USUARIO` | Usuario de PostgreSQL | `catalogostock_usuario` |
 | `BD_CLAVE` | Clave de PostgreSQL | `cambie_esta_clave_falsa` |
+| `BCRYPT_COSTO` | Opcional. Costo de bcrypt para las claves (10 a 14; por defecto 12, D-08) | `12` |
+| `VENDEDOR_NOMBRE`, `VENDEDOR_CORREO`, `VENDEDOR_TELEFONO`, `VENDEDOR_CLAVE` | Solo para `npm run crear-vendedor`; la API no las usa | ver `.env.example` |
 
 ## Comandos
 
@@ -64,6 +67,29 @@ inválida, la API no inicia y el error solo nombra la variable, nunca su valor.
 | `npm run migracion:generar -- src/migraciones/<Nombre>` | Compila y genera una migración comparando entidades y base |
 | `npm run migracion:ejecutar` | Compila y aplica las migraciones pendientes |
 | `npm run migracion:revertir` | Compila y revierte la última migración |
+| `npm run crear-vendedor` | Compila y crea el único Vendedor si aún no existe ninguno (D-07, PA-09) |
+
+### Crear el Vendedor (D-07, PA-09)
+
+La cuenta del Vendedor no se crea por el registro público. Con las migraciones
+aplicadas, defina las variables solo en la sesión de la terminal y ejecute el comando:
+
+```powershell
+$env:VENDEDOR_NOMBRE='Nombre del Vendedor'
+$env:VENDEDOR_CORREO='vendedor@correo.com'
+$env:VENDEDOR_TELEFONO='0991234567'
+$env:VENDEDOR_CLAVE='<clave de 8 a 72 caracteres con letras y números>'
+npm run crear-vendedor
+```
+
+- Si no existe ningún Vendedor, lo crea y muestra solo su id.
+- Si ya existe uno, termina sin cambios (código de salida 0). La base también impide un
+  segundo Vendedor con el índice único parcial `uq_usuarios_un_vendedor` (D-21).
+- La clave tiene de 8 a 72 caracteres con letras y números, y como máximo 72 bytes en
+  UTF-8 (D-22).
+- Si un dato no cumple las reglas (correo, celular de Ecuador, clave), no crea nada y
+  nombra la variable que hay que corregir (código de salida 1).
+- Nunca muestra la clave, su hash, el correo ni el teléfono.
 
 Las migraciones usan `src/configuracion/fuente-datos.ts` (compilado en
 `dist/configuracion/fuente-datos.js`), que lee `.env`. `synchronize` está desactivado
@@ -84,10 +110,19 @@ src/
     fuente-datos.ts               DataSource para la CLI de TypeORM
   compartido/
     dominio/                      Dinero (centavos exactos) y errores de dominio base
-    aplicacion/                   Puertos compartidos (Reloj)
-    infraestructura/              Adaptadores compartidos (RelojSistema)
+    aplicacion/                   Puertos compartidos (Reloj, GeneradorId)
+    infraestructura/              Adaptadores compartidos (RelojSistema, GeneradorIdUuid)
     presentacion/                 Filtro global de errores y ValidationPipe
+  comandos/
+    crear-vendedor.ts             Punto de entrada de `npm run crear-vendedor` (contexto sin HTTP)
   modulos/
+    usuarios/
+      dominio/                    Usuario, Correo, Telefono, NombreUsuario, Rol, regla de clave
+      aplicacion/                 CrearVendedorCasoUso y puertos UsuarioRepositorio, GeneradorHash
+      infraestructura/            Tabla usuarios (TypeORM) y GeneradorHashBcrypt (costo 12)
+      presentacion/cli/           Lógica del comando crear-vendedor
+      usuarios.module.ts
+      index.ts                    API pública del módulo
     salud/
       dominio/                    EstadoSalud
       aplicacion/                 ConsultarSaludCasoUso y puerto ComprobadorBaseDatos
