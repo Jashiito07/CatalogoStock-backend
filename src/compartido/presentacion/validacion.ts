@@ -17,8 +17,9 @@ export function aplanarErroresValidacion(
 ): ErrorCampo[] {
   return errores.flatMap((error) => {
     const campo = prefijo ? `${prefijo}.${error.property}` : error.property;
+    // Sin mensajes repetidos: varias reglas pueden compartir el mismo texto.
     const propios: ErrorCampo[] = error.constraints
-      ? [{ campo, errores: Object.values(error.constraints) }]
+      ? [{ campo, errores: [...new Set(Object.values(error.constraints))] }]
       : [];
     return [
       ...propios,

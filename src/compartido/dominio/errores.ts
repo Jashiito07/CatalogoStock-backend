@@ -4,7 +4,11 @@
  * categoría a un código HTTP y responde `{ codigo, mensaje, detalles }`.
  */
 export type CategoriaErrorDominio =
-  'DATOS_INVALIDOS' | 'NO_ENCONTRADO' | 'CONFLICTO' | 'REGLA_NEGOCIO';
+  | 'DATOS_INVALIDOS'
+  | 'NO_AUTENTICADO'
+  | 'NO_ENCONTRADO'
+  | 'CONFLICTO'
+  | 'REGLA_NEGOCIO';
 
 export type DetallesError = Record<string, unknown>;
 
@@ -30,6 +34,15 @@ export class DatosInvalidosError extends ErrorDominio {
   constructor(mensaje: string, detalles?: DetallesError) {
     super('DATOS_INVALIDOS', mensaje, detalles);
   }
+}
+
+/**
+ * No se pudo comprobar la identidad de quien llama (HTTP 401): credenciales
+ * incorrectas, token ausente, vencido o inválido. Cada caso usa su código
+ * (`CREDENCIALES_INVALIDAS`, `NO_AUTENTICADO`, `TOKEN_VENCIDO`, `TOKEN_INVALIDO`).
+ */
+export class NoAutenticadoError extends ErrorDominio {
+  readonly categoria = 'NO_AUTENTICADO';
 }
 
 /** El recurso no existe o no pertenece al usuario (HTTP 404). */

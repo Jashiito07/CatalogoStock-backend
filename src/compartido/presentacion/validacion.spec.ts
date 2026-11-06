@@ -1,7 +1,14 @@
 import 'reflect-metadata';
 import { BadRequestException } from '@nestjs/common';
 import { Type } from 'class-transformer';
-import { IsInt, IsString, Matches, Min, ValidateNested } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  Matches,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { crearValidationPipe } from './validacion.js';
 
 class LineaPrueba {
@@ -82,5 +89,29 @@ describe('RNF-03: ValidationPipe global', () => {
       },
     });
     expect(JSON.stringify(cuerpo)).not.toContain('1.234');
+  });
+
+  it('no repite un mensaje compartido por varias reglas del mismo campo', async () => {
+    class IngresoPrueba {
+      @IsString({ message: 'Ingrese su clave.' })
+      @IsNotEmpty({ message: 'Ingrese su clave.' })
+      clave!: string;
+    }
+
+    let error: BadRequestException | undefined;
+    try {
+      await crearValidationPipe().transform(
+        { clave: null },
+        { type: 'body', metatype: IngresoPrueba },
+      );
+    } catch (e) {
+      error = e as BadRequestException;
+    }
+
+    expect(error?.getResponse()).toMatchObject({
+      detalles: {
+        errores: [{ campo: 'clave', errores: ['Ingrese su clave.'] }],
+      },
+    });
   });
 });

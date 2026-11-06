@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { variablesEntornoPruebas } from './test/preparacion/entorno-pruebas.js';
 
 export default defineConfig({
   resolve: { tsconfigPaths: true },
@@ -6,17 +7,14 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['test/**/*.e2e-spec.ts'],
-    // Variables falsas para las pruebas e2e. No apuntan a ninguna base real:
-    // las pruebas de /salud sustituyen el puerto de la BD por uno falso.
-    // Las e2e con PostgreSQL deben usar una base con sufijo `_pruebas`.
-    env: {
-      PUERTO: '3999',
-      CORS_ORIGENES: 'http://localhost:4200',
-      BD_HOST: '127.0.0.1',
-      BD_PUERTO: '5432',
-      BD_NOMBRE: 'catalogostock_pruebas',
-      BD_USUARIO: 'usuario_pruebas',
-      BD_CLAVE: 'clave_pruebas_falsa',
-    },
+    // D-23: la conexión sale SOLO de .env.pruebas (base con sufijo _pruebas);
+    // el resto son valores falsos. Nunca se usa .env (desarrollo).
+    env: variablesEntornoPruebas(),
+    // Borra el esquema de pruebas y aplica las migraciones antes de empezar.
+    globalSetup: ['./test/preparacion/preparacion-global.ts'],
+    // Todas las suites comparten la misma base: una a la vez.
+    fileParallelism: false,
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
   },
 });

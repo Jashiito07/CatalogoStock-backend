@@ -7,11 +7,21 @@ import {
   IsString,
   Max,
   Min,
+  MinLength,
   validateSync,
 } from 'class-validator';
 
 /** Costo de bcrypt por defecto (D-08, contrato de usuarios). */
 export const COSTO_BCRYPT = 12;
+
+/** Vida del token de acceso por defecto: 15 minutos (D-09). */
+export const VIDA_ACCESO_SEGUNDOS = 900;
+
+/** Vida del token de renovación por defecto: 7 días (D-09). */
+export const VIDA_RENOVACION_DIAS = 7;
+
+/** Longitud mínima de JWT_SECRETO (contrato de usuarios). */
+export const LONGITUD_MINIMA_JWT_SECRETO = 32;
 
 /**
  * Variables de entorno obligatorias de la API.
@@ -66,6 +76,51 @@ export class VariablesEntorno {
   @Min(10)
   @Max(14)
   BCRYPT_COSTO: number = COSTO_BCRYPT;
+
+  /**
+   * Secreto con el que se firman los tokens de acceso (JWT HS256, D-08, D-09).
+   * Obligatorio y de al menos 32 caracteres aleatorios (contrato de usuarios).
+   */
+  @IsString()
+  @MinLength(LONGITUD_MINIMA_JWT_SECRETO, {
+    message: `JWT_SECRETO debe tener al menos ${LONGITUD_MINIMA_JWT_SECRETO} caracteres`,
+  })
+  JWT_SECRETO!: string;
+
+  /**
+   * Vida del token de acceso en segundos (D-09: 15 minutos).
+   * Opcional: si no se define vale 900. Se limita a 1–60 minutos.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'JWT_VIDA_ACCESO_SEGUNDOS debe ser un número entero' })
+  @Min(60)
+  @Max(3600)
+  JWT_VIDA_ACCESO_SEGUNDOS: number = VIDA_ACCESO_SEGUNDOS;
+
+  /**
+   * Vida del token de renovación en días (D-09: 7 días).
+   * Opcional: si no se define vale 7. Se limita a 1–30 días.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'RENOVACION_VIDA_DIAS debe ser un número entero' })
+  @Min(1)
+  @Max(30)
+  RENOVACION_VIDA_DIAS: number = VIDA_RENOVACION_DIAS;
+
+  /**
+   * Número de proxies de confianza delante de la API (`trust proxy` de
+   * Express). Con 0 (por defecto) se usa la IP de la conexión y se ignora
+   * `X-Forwarded-For`, para que nadie evite el límite de intentos (D-17)
+   * falseando esa cabecera. En producción, detrás de un proxy TLS, vale 1.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'PROXY_SALTOS_CONFIABLES debe ser un número entero' })
+  @Min(0)
+  @Max(5)
+  PROXY_SALTOS_CONFIABLES: number = 0;
 }
 
 /**

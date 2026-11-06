@@ -21,6 +21,7 @@ import {
 
 const ESTADO_POR_CATEGORIA: Readonly<Record<CategoriaErrorDominio, number>> = {
   DATOS_INVALIDOS: HttpStatus.BAD_REQUEST,
+  NO_AUTENTICADO: HttpStatus.UNAUTHORIZED,
   NO_ENCONTRADO: HttpStatus.NOT_FOUND,
   CONFLICTO: HttpStatus.CONFLICT,
   REGLA_NEGOCIO: HttpStatus.UNPROCESSABLE_ENTITY,

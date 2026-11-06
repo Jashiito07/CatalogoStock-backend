@@ -11,6 +11,7 @@ const VARIABLES_VALIDAS = {
   BD_NOMBRE: 'catalogostock_pruebas',
   BD_USUARIO: 'usuario_falso',
   BD_CLAVE: 'clave_falsa',
+  JWT_SECRETO: 'secreto_falso_de_pruebas_con_32_caracteres_o_mas',
 };
 
 describe('Configuración: validación de variables de entorno al arrancar', () => {
@@ -64,6 +65,41 @@ describe('Configuración: validación de variables de entorno al arrancar', () =
       ).toThrow('BCRYPT_COSTO');
     },
   );
+
+  it('D-09: la vida de los tokens es opcional y vale 900 s y 7 días por defecto', () => {
+    const variables = validarVariablesEntorno({ ...VARIABLES_VALIDAS });
+
+    expect(variables.JWT_VIDA_ACCESO_SEGUNDOS).toBe(900);
+    expect(variables.RENOVACION_VIDA_DIAS).toBe(7);
+    expect(variables.PROXY_SALTOS_CONFIABLES).toBe(0);
+  });
+
+  it.each([
+    ['JWT_SECRETO', 'corto'],
+    ['JWT_VIDA_ACCESO_SEGUNDOS', '30'],
+    ['JWT_VIDA_ACCESO_SEGUNDOS', 'quince'],
+    ['RENOVACION_VIDA_DIAS', '0'],
+    ['RENOVACION_VIDA_DIAS', '31'],
+    ['PROXY_SALTOS_CONFIABLES', '-1'],
+  ])('D-09: rechaza %s = "%s"', (nombre, valor) => {
+    expect(() =>
+      validarVariablesEntorno({ ...VARIABLES_VALIDAS, [nombre]: valor }),
+    ).toThrow(nombre);
+  });
+
+  it('el error de JWT_SECRETO no muestra el secreto', () => {
+    let mensaje = '';
+    try {
+      validarVariablesEntorno({
+        ...VARIABLES_VALIDAS,
+        JWT_SECRETO: 'secreto-x',
+      });
+    } catch (error) {
+      mensaje = (error as Error).message;
+    }
+    expect(mensaje).toContain('JWT_SECRETO');
+    expect(mensaje).not.toContain('secreto-x');
+  });
 
   it('el error no expone el valor de los secretos', () => {
     let mensaje = '';
