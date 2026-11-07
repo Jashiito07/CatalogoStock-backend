@@ -1,5 +1,6 @@
 import type { GeneradorId } from '../../../../compartido/aplicacion/generador-id.puerto.js';
 import type { Reloj } from '../../../../compartido/aplicacion/reloj.puerto.js';
+import type { ServicioAuditoria } from '../../../auditoria/index.js';
 import { rolPermitidoEnCanal } from '../../dominio/canal.js';
 import { TokenRenovacionInvalidoError } from '../../dominio/errores-autenticacion.js';
 import type { Sesion } from '../../dominio/sesion.js';
@@ -22,7 +23,9 @@ import type { UsuarioRepositorio } from '../puertos/usuario.repositorio.js';
  *   `TOKEN_INVALIDO`.
  * - **Reutilización:** si llega un token ya rotado (o dos solicitudes usan el
  *   mismo token a la vez), se revoca toda la familia y se responde 401
- *   `TOKEN_INVALIDO`; el usuario debe volver a iniciar sesión.
+ *   `TOKEN_INVALIDO`; el usuario debe volver a iniciar sesión. La revocación
+ *   se confirma siempre; `SESION_REUTILIZACION_DETECTADA` se registra
+ *   después y sin interrumpir (decisión del usuario, 1.5).
  */
 export class RenovarSesionCasoUso {
   constructor(
@@ -33,6 +36,7 @@ export class RenovarSesionCasoUso {
     private readonly generadorId: GeneradorId,
     private readonly reloj: Reloj,
     private readonly configuracion: ConfiguracionSesion,
+    private readonly auditoria: ServicioAuditoria,
   ) {}
 
   async ejecutar(tokenRenovacion: string): Promise<SesionEmitida> {
@@ -88,9 +92,24 @@ export class RenovarSesionCasoUso {
     sesion: Sesion,
     ahora: Date,
   ): Promise<void> {
-    await this.sesiones.revocarFamilia(sesion.familia, 'REUTILIZACION', ahora);
-    // PENDIENTE (subfase 1.5): `SESION_REUTILIZACION_DETECTADA` con
-    // `{ familiaRevocada: true }`, `idUsuario: sesion.idUsuario`,
-    // entidad `SESION` e `idEntidad: sesion.id`.
+    // Decisión del usuario (1.5): la revocación se confirma SIEMPRE, aunque
+    // la bitácora falle. El registro va después, fuera de la transacción y
+    // sin interrumpir: la respuesta sigue siendo 401 TOKEN_INVALIDO. Si la
+    // familia ya estaba revocada (el mismo token viejo presentado otra vez),
+    // no cambia nada y no se registra de nuevo.
+    const revocadas = await this.sesiones.revocarFamilia(
+      sesion.familia,
+      'REUTILIZACION',
+      ahora,
+    );
+    if (revocadas > 0) {
+      await this.auditoria.registrarSinInterrumpir({
+        accion: 'SESION_REUTILIZACION_DETECTADA',
+        idUsuario: sesion.idUsuario,
+        entidad: 'SESION',
+        idEntidad: sesion.id,
+        detalle: { familiaRevocada: true },
+      });
+    }
   }
 }

@@ -4,6 +4,9 @@ import { BaseDatosModule } from './configuracion/base-datos.module.js';
 import { LimiteIntentosModule } from './configuracion/limite-intentos.module.js';
 import { ProteccionRutasModule } from './configuracion/proteccion-rutas.module.js';
 import { validarVariablesEntorno } from './configuracion/variables-entorno.js';
+// La consulta HTTP de la bitácora no se exporta en `auditoria/index.ts` para
+// evitar un ciclo de importaciones con `usuarios` (ver ese archivo).
+import { ConsultaBitacoraModule } from './modulos/auditoria/consulta-bitacora.module.js';
 import { SaludModule } from './modulos/salud/index.js';
 import { UsuariosModule } from './modulos/usuarios/index.js';
 
@@ -22,6 +25,7 @@ import { UsuariosModule } from './modulos/usuarios/index.js';
     ProteccionRutasModule,
     SaludModule,
     UsuariosModule,
+    ConsultaBitacoraModule,
   ],
 })
 export class AppModule {}

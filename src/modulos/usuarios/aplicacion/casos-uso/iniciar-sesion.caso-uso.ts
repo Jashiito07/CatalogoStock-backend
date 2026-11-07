@@ -1,9 +1,14 @@
 import type { GeneradorId } from '../../../../compartido/aplicacion/generador-id.puerto.js';
 import type { Reloj } from '../../../../compartido/aplicacion/reloj.puerto.js';
+import type { UnidadDeTrabajo } from '../../../../compartido/aplicacion/unidad-trabajo.puerto.js';
+import type { ServicioAuditoria } from '../../../auditoria/index.js';
 import { type Canal, rolPermitidoEnCanal } from '../../dominio/canal.js';
 import { BYTES_MAXIMOS_CLAVE, bytesUtf8 } from '../../dominio/clave.js';
 import { Correo } from '../../dominio/correo.js';
-import { CredencialesInvalidasError } from '../../dominio/errores-autenticacion.js';
+import {
+  CredencialesInvalidasError,
+  type MotivoIngresoFallido,
+} from '../../dominio/errores-autenticacion.js';
 import { Sesion } from '../../dominio/sesion.js';
 import type { Usuario } from '../../dominio/usuario.js';
 import {
@@ -41,6 +46,9 @@ const CLAVE_FICTICIA = 'clave-ficticia-solo-para-igualar-tiempos-0';
  *   tiempo de respuesta sea similar al de una clave incorrecta.
  * - Al acertar: JWT de acceso de 15 min y token de renovación de 7 días cuyo
  *   hash se guarda en `sesiones` con su canal y una familia de rotación nueva.
+ * - Bitácora (RF-USU-04, D-20): `SESION_INICIADA` en la misma transacción que
+ *   la sesión; `SESION_FALLIDA` (correo intentado, canal y motivo) fuera de
+ *   transacción y sin alterar el 401.
  */
 export class IniciarSesionCasoUso {
   #hashFicticio: Promise<string> | undefined;
@@ -54,6 +62,8 @@ export class IniciarSesionCasoUso {
     private readonly generadorId: GeneradorId,
     private readonly reloj: Reloj,
     private readonly configuracion: ConfiguracionSesion,
+    private readonly unidadTrabajo: UnidadDeTrabajo,
+    private readonly auditoria: ServicioAuditoria,
   ) {}
 
   async ejecutar(datos: DatosIniciarSesion): Promise<SesionEmitida> {
@@ -61,15 +71,11 @@ export class IniciarSesionCasoUso {
     const claveValida = await this.compararClave(datos.clave, usuario);
 
     if (usuario === null || !claveValida || !usuario.activo) {
-      // PENDIENTE (subfase 1.5): `SESION_FALLIDA` con el correo intentado
-      // (minúsculas, máx. 254), el canal, `motivo: CREDENCIALES_INVALIDAS` y
-      // el id del usuario si existe (D-20). Fuera de transacción.
-      throw new CredencialesInvalidasError('CREDENCIALES_INVALIDAS');
+      throw await this.rechazar(datos, usuario, 'CREDENCIALES_INVALIDAS');
     }
     if (!rolPermitidoEnCanal(usuario.rol, datos.canal)) {
       // D-19: rol equivocado en el canal → mismo 401 y sin sesión.
-      // PENDIENTE (subfase 1.5): `SESION_FALLIDA` con `motivo: ROL_NO_PERMITIDO`.
-      throw new CredencialesInvalidasError('ROL_NO_PERMITIDO');
+      throw await this.rechazar(datos, usuario, 'ROL_NO_PERMITIDO');
     }
 
     const ahora = this.reloj.ahora();
@@ -83,15 +89,45 @@ export class IniciarSesionCasoUso {
       ahora,
       vidaDias: this.configuracion.vidaRenovacionDias,
     });
-    await this.sesiones.crear(sesion);
-    // PENDIENTE (subfase 1.5): `SESION_INICIADA` con `{ rol, canal }`,
-    // entidad `SESION` e `idEntidad: sesion.id`.
+    // RF-USU-04: la sesión y su `SESION_INICIADA` se guardan juntas o ninguna.
+    await this.unidadTrabajo.ejecutar(async () => {
+      await this.sesiones.crear(sesion);
+      await this.auditoria.registrar({
+        accion: 'SESION_INICIADA',
+        idUsuario: usuario.id,
+        entidad: 'SESION',
+        idEntidad: sesion.id,
+        detalle: { rol: usuario.rol, canal: datos.canal },
+      });
+    });
 
     const acceso = await this.emisorAcceso.emitir(
       { idUsuario: usuario.id, rol: usuario.rol },
       ahora,
     );
     return componerSesionEmitida(acceso, tokenRenovacion, sesion, usuario);
+  }
+
+  /**
+   * D-20: registra `SESION_FALLIDA` con el correo intentado (la bitácora lo
+   * normaliza a minúsculas y lo recorta a 254), el canal, el motivo y el id
+   * del usuario si la cuenta existe; **nunca** la clave. Se registra fuera de
+   * transacción y sin interrumpir: si la bitácora falla, la respuesta sigue
+   * siendo el mismo 401 (el motivo nunca llega a la respuesta).
+   */
+  private async rechazar(
+    datos: DatosIniciarSesion,
+    usuario: Usuario | null,
+    motivo: MotivoIngresoFallido,
+  ): Promise<CredencialesInvalidasError> {
+    await this.auditoria.registrarSinInterrumpir({
+      accion: 'SESION_FALLIDA',
+      idUsuario: usuario?.id ?? null,
+      entidad: 'SESION',
+      idEntidad: null,
+      detalle: { correo: datos.correo, canal: datos.canal, motivo },
+    });
+    return new CredencialesInvalidasError(motivo);
   }
 
   /** Un correo con formato inválido se trata como inexistente (mismo 401). */

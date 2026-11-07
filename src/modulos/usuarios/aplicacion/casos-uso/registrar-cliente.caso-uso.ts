@@ -1,5 +1,7 @@
 import type { GeneradorId } from '../../../../compartido/aplicacion/generador-id.puerto.js';
 import type { Reloj } from '../../../../compartido/aplicacion/reloj.puerto.js';
+import type { UnidadDeTrabajo } from '../../../../compartido/aplicacion/unidad-trabajo.puerto.js';
+import type { ServicioAuditoria } from '../../../auditoria/index.js';
 import { DatosInvalidosError } from '../../../../compartido/dominio/errores.js';
 import { verificarAceptacionPrivacidad } from '../../dominio/aviso-privacidad.js';
 import { validarFortalezaClave } from '../../dominio/clave.js';
@@ -76,6 +78,7 @@ function validarCampos<T extends Record<string, () => unknown>>(
  *    `PRIVACIDAD_NO_ACEPTADA` o `PRIVACIDAD_DESACTUALIZADA`.
  * 3. Correo ya registrado (sin importar mayúsculas) → 409 `CORREO_YA_REGISTRADO`.
  * 4. Crea siempre un usuario con rol `CLIENTE` y guarda solo el hash de la clave.
+ * 5. Registra `USUARIO_REGISTRADO` en la bitácora en la misma transacción (RF-USU-04).
  *
  * No inicia sesión: la app llama después a `/autenticacion/ingreso/cliente`.
  */
@@ -86,6 +89,8 @@ export class RegistrarClienteCasoUso {
     private readonly avisoPrivacidad: FuenteAvisoPrivacidad,
     private readonly generadorId: GeneradorId,
     private readonly reloj: Reloj,
+    private readonly unidadTrabajo: UnidadDeTrabajo,
+    private readonly auditoria: ServicioAuditoria,
   ) {}
 
   async ejecutar(datos: DatosRegistrarCliente): Promise<UsuarioPublico> {
@@ -107,6 +112,7 @@ export class RegistrarClienteCasoUso {
       throw new CorreoYaRegistradoError();
     }
 
+    // El hash (lento) se calcula antes de abrir la transacción.
     const cliente = Usuario.crearCliente({
       id: this.generadorId.generar(),
       nombre: campos.nombre,
@@ -117,12 +123,20 @@ export class RegistrarClienteCasoUso {
       ahora: this.reloj.ahora(),
     });
 
-    // Si otro registro con el mismo correo gana la carrera, el índice único
-    // hace que `crear` falle con CorreoYaRegistradoError (409).
-    await this.usuarios.crear(cliente);
-    // PENDIENTE (subfase 1.5): registrar `USUARIO_REGISTRADO` con
-    // `{ idUsuario: cliente.id, entidad: 'USUARIO', idEntidad: cliente.id,
-    // detalle: { rol: 'CLIENTE' } }` en la misma transacción que `crear`.
+    // RF-USU-04: el usuario y su `USUARIO_REGISTRADO` se guardan juntos o
+    // ninguno (contrato de auditoría). Si otro registro con el mismo correo
+    // gana la carrera, el índice único hace que `crear` falle con
+    // CorreoYaRegistradoError (409) y no queda registro en la bitácora.
+    await this.unidadTrabajo.ejecutar(async () => {
+      await this.usuarios.crear(cliente);
+      await this.auditoria.registrar({
+        accion: 'USUARIO_REGISTRADO',
+        idUsuario: cliente.id,
+        entidad: 'USUARIO',
+        idEntidad: cliente.id,
+        detalle: { rol: cliente.rol },
+      });
+    });
 
     return cliente.aPublico();
   }

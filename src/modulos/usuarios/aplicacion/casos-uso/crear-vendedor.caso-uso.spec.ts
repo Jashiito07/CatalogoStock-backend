@@ -17,6 +17,7 @@ import {
   CrearVendedorCasoUso,
   type DatosCrearVendedor,
 } from './crear-vendedor.caso-uso.js';
+import { AuditoriaFalsa, UnidadDeTrabajoFalsa } from './dobles.prueba-spec.js';
 
 /** Repositorio en memoria con las mismas reglas de unicidad que la tabla. */
 class UsuarioRepositorioEnMemoria implements UsuarioRepositorio {
@@ -24,6 +25,10 @@ class UsuarioRepositorioEnMemoria implements UsuarioRepositorio {
 
   buscarPorId(id: string): Promise<Usuario | null> {
     return Promise.resolve(this.usuarios.find((u) => u.id === id) ?? null);
+  }
+
+  buscarPorIds(ids: readonly string[]): Promise<Usuario[]> {
+    return Promise.resolve(this.usuarios.filter((u) => ids.includes(u.id)));
   }
 
   buscarPorCorreo(correo: Correo): Promise<Usuario | null> {
@@ -83,14 +88,63 @@ const DATOS_VALIDOS: DatosCrearVendedor = {
 
 function preparar(generadorHash: GeneradorHash = new GeneradorHashFalso()) {
   const repositorio = new UsuarioRepositorioEnMemoria();
+  const unidad = new UnidadDeTrabajoFalsa();
+  const auditoria = new AuditoriaFalsa(unidad);
   const casoUso = new CrearVendedorCasoUso(
     repositorio,
     generadorHash,
     generadorIdSecuencial(),
     reloj,
+    unidad,
+    auditoria,
   );
-  return { repositorio, casoUso, generadorHash };
+  return { repositorio, casoUso, generadorHash, auditoria };
 }
+
+describe('RF-USU-04: CrearVendedorCasoUso registra VENDEDOR_CREADO', () => {
+  it('Dado que no existe ningún Vendedor, al crearlo deja VENDEDOR_CREADO con origen COMANDO_SEMILLA en la misma transacción', async () => {
+    const { casoUso, auditoria } = preparar();
+
+    const resultado = await casoUso.ejecutar(DATOS_VALIDOS);
+
+    const idUsuario = resultado.creado ? resultado.idUsuario : '';
+    expect(auditoria.registradas).toEqual([
+      {
+        actividad: {
+          accion: 'VENDEDOR_CREADO',
+          idUsuario,
+          entidad: 'USUARIO',
+          idEntidad: idUsuario,
+          detalle: { origen: 'COMANDO_SEMILLA' },
+        },
+        enTransaccion: true,
+        sinInterrumpir: false,
+      },
+    ]);
+    expect(JSON.stringify(auditoria.registradas)).not.toContain(
+      DATOS_VALIDOS.clave,
+    );
+  });
+
+  it('si ya existe un Vendedor (o la base rechaza el segundo), no registra nada', async () => {
+    const { repositorio, casoUso, auditoria } = preparar();
+    await casoUso.ejecutar(DATOS_VALIDOS);
+    await casoUso.ejecutar(DATOS_VALIDOS);
+    repositorio.existeConRol = () => Promise.resolve(false);
+    repositorio.crear = () => Promise.reject(new VendedorYaExisteError());
+    await casoUso.ejecutar({ ...DATOS_VALIDOS, correo: 'otro@ejemplo.test' });
+
+    expect(auditoria.acciones()).toEqual(['VENDEDOR_CREADO']);
+  });
+
+  it('si la bitácora falla, el comando falla (la transacción deshace el Vendedor)', async () => {
+    const { casoUso, auditoria } = preparar();
+    const fallo = new Error('bitácora no disponible');
+    auditoria.fallo = fallo;
+
+    await expect(casoUso.ejecutar(DATOS_VALIDOS)).rejects.toBe(fallo);
+  });
+});
 
 function clienteExistente(correo: string): Usuario {
   return Usuario.crearCliente({

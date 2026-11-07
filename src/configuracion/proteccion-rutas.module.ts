@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { AuditoriaModule } from '../modulos/auditoria/index.js';
 import {
   GuardRoles,
   GuardTokenAcceso,
@@ -22,7 +23,8 @@ import {
  * token. Lo comprueba una prueba e2e (`autorizacion.e2e-spec.ts`).
  */
 @Module({
-  imports: [UsuariosModule],
+  // AuditoriaModule: `GuardRoles` registra los 403 como `ACCESO_DENEGADO` (D-18).
+  imports: [UsuariosModule, AuditoriaModule],
   providers: [
     { provide: APP_GUARD, useClass: GuardTokenAcceso },
     { provide: APP_GUARD, useClass: GuardRoles },

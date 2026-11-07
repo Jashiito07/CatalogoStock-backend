@@ -5,6 +5,11 @@
  */
 import type { GeneradorId } from '../../../../compartido/aplicacion/generador-id.puerto.js';
 import type { Reloj } from '../../../../compartido/aplicacion/reloj.puerto.js';
+import type { UnidadDeTrabajo } from '../../../../compartido/aplicacion/unidad-trabajo.puerto.js';
+import type {
+  RegistrarActividad,
+  ServicioAuditoria,
+} from '../../../auditoria/index.js';
 import type { AvisoPrivacidad } from '../../dominio/aviso-privacidad.js';
 import { Correo } from '../../dominio/correo.js';
 import {
@@ -69,6 +74,10 @@ export class UsuarioRepositorioEnMemoria implements UsuarioRepositorio {
 
   buscarPorId(id: string): Promise<Usuario | null> {
     return Promise.resolve(this.usuarios.find((u) => u.id === id) ?? null);
+  }
+
+  buscarPorIds(ids: readonly string[]): Promise<Usuario[]> {
+    return Promise.resolve(this.usuarios.filter((u) => ids.includes(u.id)));
   }
 
   buscarPorCorreo(correo: Correo): Promise<Usuario | null> {
@@ -206,6 +215,65 @@ export class GeneradorTokenFalso implements GeneradorTokenRenovacion {
 export class FuenteAvisoFalsa implements FuenteAvisoPrivacidad {
   obtenerVigente(): AvisoPrivacidad {
     return AVISO_VIGENTE;
+  }
+}
+
+/** Unidad de trabajo en memoria: ejecuta el trabajo y recuerda si hay una transacción abierta. */
+export class UnidadDeTrabajoFalsa implements UnidadDeTrabajo {
+  activa = false;
+  transacciones = 0;
+
+  async ejecutar<T>(trabajo: () => Promise<T>): Promise<T> {
+    this.transacciones++;
+    this.activa = true;
+    try {
+      return await trabajo();
+    } finally {
+      this.activa = false;
+    }
+  }
+}
+
+export interface ActividadRegistrada {
+  actividad: RegistrarActividad;
+  /** `true` si se registró dentro de `UnidadDeTrabajoFalsa.ejecutar`. */
+  enTransaccion: boolean;
+  /** `true` si se usó `registrarSinInterrumpir`. */
+  sinInterrumpir: boolean;
+}
+
+/** Bitácora en memoria; con `fallo` definido, `registrar` falla y `registrarSinInterrumpir` lo ignora. */
+export class AuditoriaFalsa implements ServicioAuditoria {
+  readonly registradas: ActividadRegistrada[] = [];
+  fallo: Error | undefined;
+
+  constructor(private readonly unidad?: UnidadDeTrabajoFalsa) {}
+
+  registrar(actividad: RegistrarActividad): Promise<void> {
+    if (this.fallo) {
+      return Promise.reject(this.fallo);
+    }
+    this.anotar(actividad, false);
+    return Promise.resolve();
+  }
+
+  registrarSinInterrumpir(actividad: RegistrarActividad): Promise<void> {
+    if (!this.fallo) {
+      this.anotar(actividad, true);
+    }
+    return Promise.resolve();
+  }
+
+  acciones(): string[] {
+    return this.registradas.map((r) => r.actividad.accion);
+  }
+
+  private anotar(actividad: RegistrarActividad, sinInterrumpir: boolean): void {
+    this.registradas.push({
+      actividad: structuredClone(actividad),
+      enTransaccion: this.unidad?.activa ?? false,
+      sinInterrumpir,
+    });
   }
 }
 

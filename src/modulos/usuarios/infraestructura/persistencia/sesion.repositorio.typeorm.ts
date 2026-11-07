@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { IsNull, type Repository } from 'typeorm';
 import type { SesionRepositorio } from '../../aplicacion/puertos/sesion.repositorio.js';
 import type { MotivoRevocacion, Sesion } from '../../dominio/sesion.js';
+import { repositorioEnCurso } from '../../../../compartido/infraestructura/unidad-trabajo.typeorm.js';
 import { SesionMapeador } from './sesion.mapeador.js';
 import { SesionOrmEntity } from './sesion.orm-entity.js';
 
@@ -14,12 +15,17 @@ export class SesionRepositorioTypeorm implements SesionRepositorio {
     private readonly repositorio: Repository<SesionOrmEntity>,
   ) {}
 
+  /** Tabla `sesiones` en la transacción en curso (UnidadDeTrabajo), si la hay. */
+  private get filas(): Repository<SesionOrmEntity> {
+    return repositorioEnCurso(this.repositorio);
+  }
+
   async crear(sesion: Sesion): Promise<void> {
-    await this.repositorio.insert(SesionMapeador.aPersistencia(sesion));
+    await this.filas.insert(SesionMapeador.aPersistencia(sesion));
   }
 
   async buscarPorHashToken(hashToken: string): Promise<Sesion | null> {
-    const fila = await this.repositorio.findOneBy({ hashToken });
+    const fila = await this.filas.findOneBy({ hashToken });
     return fila ? SesionMapeador.aDominio(fila) : null;
   }
 
@@ -54,7 +60,7 @@ export class SesionRepositorioTypeorm implements SesionRepositorio {
     motivo: Exclude<MotivoRevocacion, 'ROTADA'>,
     ahora: Date,
   ): Promise<number> {
-    const resultado = await this.repositorio.update(
+    const resultado = await this.filas.update(
       { familia, fechaRevocacion: IsNull() },
       { fechaRevocacion: ahora, motivoRevocacion: motivo },
     );

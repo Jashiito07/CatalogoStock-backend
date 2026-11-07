@@ -5,6 +5,10 @@ export {
   type DatosCrearVendedor,
   type ResultadoCrearVendedor,
 } from './aplicacion/casos-uso/crear-vendedor.caso-uso.js';
+export {
+  ConsultarResumenesUsuariosCasoUso,
+  type ResumenUsuario,
+} from './aplicacion/casos-uso/consultar-resumenes-usuarios.caso-uso.js';
 export { ROLES, type Rol } from './dominio/rol.js';
 export { CANALES, type Canal } from './dominio/canal.js';
 export type { UsuarioPublico } from './dominio/usuario.js';

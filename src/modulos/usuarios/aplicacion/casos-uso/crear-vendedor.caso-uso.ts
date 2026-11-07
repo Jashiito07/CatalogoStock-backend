@@ -1,5 +1,7 @@
 import type { GeneradorId } from '../../../../compartido/aplicacion/generador-id.puerto.js';
 import type { Reloj } from '../../../../compartido/aplicacion/reloj.puerto.js';
+import type { UnidadDeTrabajo } from '../../../../compartido/aplicacion/unidad-trabajo.puerto.js';
+import type { ServicioAuditoria } from '../../../auditoria/index.js';
 import { validarFortalezaClave } from '../../dominio/clave.js';
 import { Correo } from '../../dominio/correo.js';
 import {
@@ -32,6 +34,8 @@ export type ResultadoCrearVendedor =
  * - Valida nombre, correo, teléfono (D-14) y la fortaleza de la clave con las
  *   mismas reglas que el registro del Cliente.
  * - Guarda solo el hash de la clave, nunca la clave (RNF-02).
+ * - Registra `VENDEDOR_CREADO` (`origen: COMANDO_SEMILLA`) en la bitácora, en
+ *   la misma transacción que la cuenta (RF-USU-04).
  *
  * No conoce HTTP, la CLI ni TypeORM: depende solo de sus puertos.
  */
@@ -41,6 +45,8 @@ export class CrearVendedorCasoUso {
     private readonly generadorHash: GeneradorHash,
     private readonly generadorId: GeneradorId,
     private readonly reloj: Reloj,
+    private readonly unidadTrabajo: UnidadDeTrabajo,
+    private readonly auditoria: ServicioAuditoria,
   ) {}
 
   async ejecutar(datos: DatosCrearVendedor): Promise<ResultadoCrearVendedor> {
@@ -68,19 +74,28 @@ export class CrearVendedorCasoUso {
     });
 
     try {
-      await this.usuarios.crear(vendedor);
+      // RF-USU-04: el Vendedor y su `VENDEDOR_CREADO` se guardan juntos o
+      // ninguno (contrato de auditoría).
+      await this.unidadTrabajo.ejecutar(async () => {
+        await this.usuarios.crear(vendedor);
+        await this.auditoria.registrar({
+          accion: 'VENDEDOR_CREADO',
+          idUsuario: vendedor.id,
+          entidad: 'USUARIO',
+          idEntidad: vendedor.id,
+          detalle: { origen: 'COMANDO_SEMILLA' },
+        });
+      });
     } catch (error) {
       // D-21: otra ejecución creó el Vendedor entre la comprobación y la
-      // inserción; la base lo rechazó y el resultado es «sin cambios».
+      // inserción; la base lo rechazó, la transacción se deshizo y el
+      // resultado es «sin cambios». Se captura fuera de la transacción: tras
+      // el error, PostgreSQL ya no admite más órdenes en ella.
       if (error instanceof VendedorYaExisteError) {
         return { creado: false, motivo: 'VENDEDOR_EXISTENTE' };
       }
       throw error;
     }
-    // PENDIENTE (subfase 1.5): registrar `VENDEDOR_CREADO` en la bitácora con
-    // `ServicioAuditoria.registrar({ accion: 'VENDEDOR_CREADO', idUsuario: vendedor.id,
-    // entidad: 'USUARIO', idEntidad: vendedor.id, detalle: { origen: 'COMANDO_SEMILLA' } })`,
-    // en la misma transacción que `crear` (contrato de auditoría, CA-03).
 
     return { creado: true, idUsuario: vendedor.id };
   }
