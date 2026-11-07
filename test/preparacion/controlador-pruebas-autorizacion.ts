@@ -20,8 +20,11 @@ export const RUTA_PRUEBAS_AUTORIZACION = '/api/v1/pruebas-autorizacion';
 
 /**
  * Controlador **solo de pruebas e2e** (no existe en `src/` ni en la API
- * desplegada). Sirve para verificar CA-02 en la subfase 1.4: el contrato aún
- * no tiene una ruta del Vendedor fuera de `GET /auditoria`, que llega en 1.5.
+ * desplegada). Sirve para verificar la segunda parte de CA-02 («no se
+ * modifica ningún dato») con una ruta del Vendedor que sí escribe: la única
+ * ruta administrativa real hasta ahora, `GET /auditoria` (1.5), es de solo
+ * lectura. Se puede retirar cuando exista la primera ruta real del Vendedor
+ * que modifique datos (F2, productos).
  *
  * No usa `@Publico()`: queda bajo los mismos guards globales que la API.
  */

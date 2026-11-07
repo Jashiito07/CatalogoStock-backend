@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import type { Repository } from 'typeorm';
+import { In, type Repository } from 'typeorm';
+import { repositorioEnCurso } from '../../../../compartido/infraestructura/unidad-trabajo.typeorm.js';
 import type { UsuarioRepositorio } from '../../aplicacion/puertos/usuario.repositorio.js';
 import type { Correo } from '../../dominio/correo.js';
 import {
@@ -62,23 +63,36 @@ export class UsuarioRepositorioTypeorm implements UsuarioRepositorio {
     private readonly repositorio: Repository<UsuarioOrmEntity>,
   ) {}
 
+  /** Tabla `usuarios` en la transacción en curso (UnidadDeTrabajo), si la hay. */
+  private get filas(): Repository<UsuarioOrmEntity> {
+    return repositorioEnCurso(this.repositorio);
+  }
+
   async buscarPorId(id: string): Promise<Usuario | null> {
-    const fila = await this.repositorio.findOneBy({ id });
+    const fila = await this.filas.findOneBy({ id });
     return fila ? UsuarioMapeador.aDominio(fila) : null;
   }
 
+  async buscarPorIds(ids: readonly string[]): Promise<Usuario[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const filas = await this.filas.findBy({ id: In([...ids]) });
+    return filas.map((fila) => UsuarioMapeador.aDominio(fila));
+  }
+
   async buscarPorCorreo(correo: Correo): Promise<Usuario | null> {
-    const fila = await this.repositorio.findOneBy({ correo: correo.valor });
+    const fila = await this.filas.findOneBy({ correo: correo.valor });
     return fila ? UsuarioMapeador.aDominio(fila) : null;
   }
 
   existeConRol(rol: Rol): Promise<boolean> {
-    return this.repositorio.existsBy({ rol });
+    return this.filas.existsBy({ rol });
   }
 
   async crear(usuario: Usuario): Promise<void> {
     try {
-      await this.repositorio.insert(UsuarioMapeador.aPersistencia(usuario));
+      await this.filas.insert(UsuarioMapeador.aPersistencia(usuario));
     } catch (error) {
       if (esCorreoDuplicado(error)) {
         throw new CorreoYaRegistradoError();

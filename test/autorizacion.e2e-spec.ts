@@ -12,9 +12,15 @@ import {
  * (D-23): guard global de autenticación, `@Publico()`, `@Roles`,
  * `GET /usuarios/yo` y orden de los guards respecto del límite de intentos.
  *
- * La ruta del Vendedor que modifica datos vive en un controlador solo de
- * pruebas (`ControladorPruebasAutorizacion`): el contrato no tiene todavía una
- * ruta administrativa real fuera de `GET /auditoria` (subfase 1.5).
+ * La ruta del Vendedor que **modifica datos** vive en un controlador solo de
+ * pruebas (`ControladorPruebasAutorizacion`). La ruta administrativa real de
+ * CA-02 es `GET /auditoria` (subfase 1.5, `auditoria.e2e-spec.ts`), pero es de
+ * solo lectura: no serviría para demostrar que un 403 no modifica datos que
+ * la ruta sí habría modificado. Se mantiene hasta la primera ruta real del
+ * Vendedor que escriba (F2, productos).
+ *
+ * Desde 1.5, cada 403 deja además un `ACCESO_DENEGADO` en la bitácora (D-18):
+ * la instantánea compara las demás tablas y la bitácora se comprueba aparte.
  */
 
 const VERSION_AVISO = '2026-11-1';
@@ -116,6 +122,13 @@ describe('Subfase 1.4 (e2e): protección de rutas por rol (RF-USU-03, CA-02)', (
     return { usuarios, sesiones };
   }
 
+  async function accesosDenegados(): Promise<unknown[]> {
+    return contexto.fuente.query(
+      `SELECT id_usuario, detalle FROM auditoria
+       WHERE accion = 'ACCESO_DENEGADO' ORDER BY fecha`,
+    );
+  }
+
   async function estaActivo(id: string): Promise<boolean> {
     const [fila] = await contexto.fuente.query<{ activo: boolean }[]>(
       'SELECT activo FROM usuarios WHERE id = $1',
@@ -159,6 +172,17 @@ describe('Subfase 1.4 (e2e): protección de rutas por rol (RF-USU-03, CA-02)', (
       expect(respuesta.body).toEqual(NO_AUTORIZADO);
       expect(await instantanea()).toEqual(antes);
       expect(await estaActivo(cliente.usuario.id)).toBe(true);
+      // D-18: lo único nuevo es el registro del intento en la bitácora.
+      expect(await accesosDenegados()).toEqual([
+        {
+          id_usuario: cliente.usuario.id,
+          detalle: {
+            metodo: 'POST',
+            ruta: `${RUTA_PRUEBAS_AUTORIZACION}/usuarios/${cliente.usuario.id}/desactivar`,
+            rolUsuario: 'CLIENTE',
+          },
+        },
+      ]);
     });
 
     it('control: el Vendedor sí puede usar esa ruta y el cambio se aplica (la ruta modifica datos de verdad)', async () => {
@@ -201,17 +225,29 @@ describe('Subfase 1.4 (e2e): protección de rutas por rol (RF-USU-03, CA-02)', (
 
       expect(respuesta.body.codigo).toBe('NO_AUTENTICADO');
       expect(await instantanea()).toEqual(antes);
+      // Los 401 no se registran como acceso denegado.
+      expect(await accesosDenegados()).toEqual([]);
     });
 
-    it('el Vendedor en una ruta solo de Clientes → 403 NO_AUTORIZADO', async () => {
+    it('el Vendedor en una ruta solo de Clientes → 403 NO_AUTORIZADO (también se registra)', async () => {
       const vendedor = await sesionVendedor();
 
       const respuesta = await conToken(
-        http().get(`${RUTA_PRUEBAS_AUTORIZACION}/solo-cliente`),
+        http().get(`${RUTA_PRUEBAS_AUTORIZACION}/solo-cliente?x=1`),
         vendedor.tokenAcceso,
       ).expect(403);
 
       expect(respuesta.body).toEqual(NO_AUTORIZADO);
+      expect(await accesosDenegados()).toEqual([
+        {
+          id_usuario: vendedor.usuario.id,
+          detalle: {
+            metodo: 'GET',
+            ruta: `${RUTA_PRUEBAS_AUTORIZACION}/solo-cliente`,
+            rolUsuario: 'VENDEDOR',
+          },
+        },
+      ]);
     });
 
     it('una ruta sin @Roles admite a cualquier usuario autenticado y @UsuarioActual entrega { id, rol }', async () => {

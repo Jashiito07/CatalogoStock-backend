@@ -4,8 +4,8 @@ import {
 } from '../../../compartido/dominio/errores.js';
 
 /**
- * Motivo interno de un ingreso fallido (D-19, D-20). Solo se usará en la
- * bitácora (`SESION_FALLIDA`, subfase 1.5); **nunca** se envía en la respuesta.
+ * Motivo interno de un ingreso fallido (D-19, D-20). Solo se usa en la
+ * bitácora (`SESION_FALLIDA`); **nunca** se envía en la respuesta.
  */
 export type MotivoIngresoFallido =
   'CREDENCIALES_INVALIDAS' | 'ROL_NO_PERMITIDO';

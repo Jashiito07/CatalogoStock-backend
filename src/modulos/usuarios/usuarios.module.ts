@@ -7,11 +7,22 @@ import {
   type GeneradorId,
 } from '../../compartido/aplicacion/generador-id.puerto.js';
 import { RELOJ, type Reloj } from '../../compartido/aplicacion/reloj.puerto.js';
+import {
+  UNIDAD_DE_TRABAJO,
+  type UnidadDeTrabajo,
+} from '../../compartido/aplicacion/unidad-trabajo.puerto.js';
 import { GeneradorIdUuid } from '../../compartido/infraestructura/generador-id-uuid.js';
 import { RelojSistema } from '../../compartido/infraestructura/reloj-sistema.js';
+import { UnidadDeTrabajoTypeorm } from '../../compartido/infraestructura/unidad-trabajo.typeorm.js';
 import type { VariablesEntorno } from '../../configuracion/variables-entorno.js';
+import {
+  AuditoriaModule,
+  SERVICIO_AUDITORIA,
+  type ServicioAuditoria,
+} from '../auditoria/index.js';
 import { CerrarSesionCasoUso } from './aplicacion/casos-uso/cerrar-sesion.caso-uso.js';
 import { ConsultarAvisoPrivacidadCasoUso } from './aplicacion/casos-uso/consultar-aviso-privacidad.caso-uso.js';
+import { ConsultarResumenesUsuariosCasoUso } from './aplicacion/casos-uso/consultar-resumenes-usuarios.caso-uso.js';
 import { ConsultarUsuarioActualCasoUso } from './aplicacion/casos-uso/consultar-usuario-actual.caso-uso.js';
 import { CrearVendedorCasoUso } from './aplicacion/casos-uso/crear-vendedor.caso-uso.js';
 import { IniciarSesionCasoUso } from './aplicacion/casos-uso/iniciar-sesion.caso-uso.js';
@@ -71,10 +82,15 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
  *   `@UsuarioActual` y la regla de propiedad. Los guards se registran como
  *   globales en `ProteccionRutasModule`, no aquí: así el comando
  *   `crear-vendedor`, que importa este módulo, no carga guards HTTP.
+ * - 1.5: registra en la bitácora (`AuditoriaModule`) el registro, los
+ *   ingresos, la salida, la reutilización de tokens y el Vendedor semilla; las
+ *   escrituras de datos van con su registro en una sola transacción.
  */
 @Module({
   imports: [
     TypeOrmModule.forFeature([UsuarioOrmEntity, SesionOrmEntity]),
+    // 1.5: registrar actividades en la bitácora (RF-USU-04).
+    AuditoriaModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configuracion: Configuracion) => ({
@@ -128,16 +144,33 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
     },
     { provide: GENERADOR_ID, useClass: GeneradorIdUuid },
     { provide: RELOJ, useClass: RelojSistema },
+    { provide: UNIDAD_DE_TRABAJO, useClass: UnidadDeTrabajoTypeorm },
     {
       provide: CrearVendedorCasoUso,
-      inject: [USUARIO_REPOSITORIO, GENERADOR_HASH, GENERADOR_ID, RELOJ],
+      inject: [
+        USUARIO_REPOSITORIO,
+        GENERADOR_HASH,
+        GENERADOR_ID,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
       useFactory: (
         usuarios: UsuarioRepositorio,
         generadorHash: GeneradorHash,
         generadorId: GeneradorId,
         reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
       ) =>
-        new CrearVendedorCasoUso(usuarios, generadorHash, generadorId, reloj),
+        new CrearVendedorCasoUso(
+          usuarios,
+          generadorHash,
+          generadorId,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
     },
     {
       provide: RegistrarClienteCasoUso,
@@ -147,6 +180,8 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
         FUENTE_AVISO_PRIVACIDAD,
         GENERADOR_ID,
         RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
       ],
       useFactory: (
         usuarios: UsuarioRepositorio,
@@ -154,6 +189,8 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
         aviso: FuenteAvisoPrivacidad,
         generadorId: GeneradorId,
         reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
       ) =>
         new RegistrarClienteCasoUso(
           usuarios,
@@ -161,6 +198,8 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
           aviso,
           generadorId,
           reloj,
+          unidadTrabajo,
+          auditoria,
         ),
     },
     {
@@ -174,6 +213,8 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
         GENERADOR_ID,
         RELOJ,
         CONFIGURACION_SESION,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
       ],
       useFactory: (
         usuarios: UsuarioRepositorio,
@@ -184,6 +225,8 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
         generadorId: GeneradorId,
         reloj: Reloj,
         configuracion: ConfiguracionSesion,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
       ) =>
         new IniciarSesionCasoUso(
           usuarios,
@@ -194,6 +237,8 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
           generadorId,
           reloj,
           configuracion,
+          unidadTrabajo,
+          auditoria,
         ),
     },
     {
@@ -206,6 +251,7 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
         GENERADOR_ID,
         RELOJ,
         CONFIGURACION_SESION,
+        SERVICIO_AUDITORIA,
       ],
       useFactory: (
         usuarios: UsuarioRepositorio,
@@ -215,6 +261,7 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
         generadorId: GeneradorId,
         reloj: Reloj,
         configuracion: ConfiguracionSesion,
+        auditoria: ServicioAuditoria,
       ) =>
         new RenovarSesionCasoUso(
           usuarios,
@@ -224,16 +271,32 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
           generadorId,
           reloj,
           configuracion,
+          auditoria,
         ),
     },
     {
       provide: CerrarSesionCasoUso,
-      inject: [SESION_REPOSITORIO, GENERADOR_TOKEN_RENOVACION, RELOJ],
+      inject: [
+        SESION_REPOSITORIO,
+        GENERADOR_TOKEN_RENOVACION,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
       useFactory: (
         sesiones: SesionRepositorio,
         generadorToken: GeneradorTokenRenovacion,
         reloj: Reloj,
-      ) => new CerrarSesionCasoUso(sesiones, generadorToken, reloj),
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
+      ) =>
+        new CerrarSesionCasoUso(
+          sesiones,
+          generadorToken,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
     },
     {
       provide: ConsultarAvisoPrivacidadCasoUso,
@@ -247,9 +310,21 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
       useFactory: (usuarios: UsuarioRepositorio) =>
         new ConsultarUsuarioActualCasoUso(usuarios),
     },
+    {
+      provide: ConsultarResumenesUsuariosCasoUso,
+      inject: [USUARIO_REPOSITORIO],
+      useFactory: (usuarios: UsuarioRepositorio) =>
+        new ConsultarResumenesUsuariosCasoUso(usuarios),
+    },
   ],
   // EMISOR_TOKEN_ACCESO se exporta para el guard global de autenticación,
   // que se registra en `ProteccionRutasModule` (subfase 1.4).
-  exports: [CrearVendedorCasoUso, EMISOR_TOKEN_ACCESO],
+  // ConsultarResumenesUsuariosCasoUso es el servicio público con el que la
+  // bitácora muestra `{ id, nombre, rol }` (subfase 1.5).
+  exports: [
+    CrearVendedorCasoUso,
+    EMISOR_TOKEN_ACCESO,
+    ConsultarResumenesUsuariosCasoUso,
+  ],
 })
 export class UsuariosModule {}

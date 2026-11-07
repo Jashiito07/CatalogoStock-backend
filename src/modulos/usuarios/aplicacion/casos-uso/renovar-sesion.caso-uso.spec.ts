@@ -1,6 +1,7 @@
 import { TokenRenovacionInvalidoError } from '../../dominio/errores-autenticacion.js';
 import type { Canal } from '../../dominio/canal.js';
 import {
+  AuditoriaFalsa,
   CLAVE_VALIDA,
   CONFIGURACION,
   crearCliente,
@@ -13,6 +14,7 @@ import {
   RelojFalso,
   SesionRepositorioEnMemoria,
   UN_DIA_MS,
+  UnidadDeTrabajoFalsa,
   UsuarioRepositorioEnMemoria,
 } from './dobles.prueba-spec.js';
 import { IniciarSesionCasoUso } from './iniciar-sesion.caso-uso.js';
@@ -29,6 +31,8 @@ function preparar() {
   const tokens = new GeneradorTokenFalso();
   const ids = generadorIdSecuencial();
   const emisor = new EmisorTokenAccesoFalso();
+  const unidad = new UnidadDeTrabajoFalsa();
+  const auditoria = new AuditoriaFalsa(unidad);
   const iniciar = new IniciarSesionCasoUso(
     usuarios,
     sesiones,
@@ -38,6 +42,8 @@ function preparar() {
     ids,
     reloj,
     CONFIGURACION,
+    unidad,
+    auditoria,
   );
   const renovar = new RenovarSesionCasoUso(
     usuarios,
@@ -47,6 +53,7 @@ function preparar() {
     ids,
     reloj,
     CONFIGURACION,
+    auditoria,
   );
   const ingresar = async (canal: Canal = 'APP') =>
     iniciar.ejecutar({
@@ -55,7 +62,7 @@ function preparar() {
         canal === 'APP' ? 'cliente@ejemplo.test' : 'vendedor@ejemplo.test',
       clave: CLAVE_VALIDA,
     });
-  return { usuarios, sesiones, reloj, renovar, ingresar };
+  return { usuarios, sesiones, reloj, renovar, ingresar, auditoria };
 }
 
 async function codigoDelFallo(promesa: Promise<unknown>): Promise<string> {
@@ -115,6 +122,61 @@ describe('RF-USU-01 / D-09: RenovarSesionCasoUso (rotación)', () => {
     await expect(
       codigoDelFallo(renovar.ejecutar(renovada.tokenRenovacion)),
     ).resolves.toBe('TOKEN_INVALIDO');
+  });
+
+  it('RF-USU-04: la reutilización deja SESION_REUTILIZACION_DETECTADA sin interrumpir, fuera de transacción y una sola vez', async () => {
+    const { sesiones, renovar, ingresar, auditoria } = preparar();
+    const inicial = await ingresar();
+    await renovar.ejecutar(inicial.tokenRenovacion);
+
+    await renovar.ejecutar(inicial.tokenRenovacion).catch(() => undefined);
+    // Repetir con la familia ya revocada no cambia nada ni registra otra vez.
+    await renovar.ejecutar(inicial.tokenRenovacion).catch(() => undefined);
+
+    expect(auditoria.acciones()).toEqual([
+      'SESION_INICIADA',
+      'SESION_REUTILIZACION_DETECTADA',
+    ]);
+    expect(auditoria.registradas[1]).toEqual({
+      actividad: {
+        accion: 'SESION_REUTILIZACION_DETECTADA',
+        idUsuario: 'id-cliente',
+        entidad: 'SESION',
+        idEntidad: sesiones.sesiones[0].id,
+        detalle: { familiaRevocada: true },
+      },
+      enTransaccion: false,
+      sinInterrumpir: true,
+    });
+  });
+
+  it('decisión 1.5: con la bitácora fallando, la reutilización responde TOKEN_INVALIDO y la cadena queda revocada igual', async () => {
+    const { sesiones, reloj, renovar, ingresar, auditoria } = preparar();
+    const inicial = await ingresar();
+    const renovada = await renovar.ejecutar(inicial.tokenRenovacion);
+    auditoria.fallo = new Error('bitácora no disponible');
+
+    await expect(
+      codigoDelFallo(renovar.ejecutar(inicial.tokenRenovacion)),
+    ).resolves.toBe('TOKEN_INVALIDO');
+
+    expect(sesiones.vigentes(reloj.ahora())).toHaveLength(0);
+    expect(sesiones.sesiones.map((s) => s.motivoRevocacion)).toEqual([
+      'ROTADA',
+      'REUTILIZACION',
+    ]);
+    await expect(
+      codigoDelFallo(renovar.ejecutar(renovada.tokenRenovacion)),
+    ).resolves.toBe('TOKEN_INVALIDO');
+  });
+
+  it('una renovación normal no deja registro en la bitácora', async () => {
+    const { renovar, ingresar, auditoria } = preparar();
+    const inicial = await ingresar();
+
+    await renovar.ejecutar(inicial.tokenRenovacion);
+
+    expect(auditoria.acciones()).toEqual(['SESION_INICIADA']);
   });
 
   it('la reutilización solo revoca su familia, no otras sesiones del usuario', async () => {

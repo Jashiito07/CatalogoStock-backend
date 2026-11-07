@@ -1,6 +1,7 @@
 import { CredencialesInvalidasError } from '../../dominio/errores-autenticacion.js';
 import type { Canal } from '../../dominio/canal.js';
 import {
+  AuditoriaFalsa,
   CLAVE_VALIDA,
   CONFIGURACION,
   crearCliente,
@@ -14,6 +15,7 @@ import {
   RelojFalso,
   SesionRepositorioEnMemoria,
   UN_DIA_MS,
+  UnidadDeTrabajoFalsa,
   UsuarioRepositorioEnMemoria,
 } from './dobles.prueba-spec.js';
 import { IniciarSesionCasoUso } from './iniciar-sesion.caso-uso.js';
@@ -30,6 +32,8 @@ function preparar() {
   const sesiones = new SesionRepositorioEnMemoria();
   const hash = new GeneradorHashFalso();
   const emisor = new EmisorTokenAccesoFalso();
+  const unidad = new UnidadDeTrabajoFalsa();
+  const auditoria = new AuditoriaFalsa(unidad);
   const casoUso = new IniciarSesionCasoUso(
     usuarios,
     sesiones,
@@ -39,8 +43,10 @@ function preparar() {
     generadorIdSecuencial(),
     new RelojFalso(),
     CONFIGURACION,
+    unidad,
+    auditoria,
   );
-  return { usuarios, sesiones, hash, emisor, casoUso };
+  return { usuarios, sesiones, hash, emisor, auditoria, casoUso };
 }
 
 async function motivoDelFallo(promesa: Promise<unknown>): Promise<string> {
@@ -245,6 +251,137 @@ describe('RF-USU-01 / CA-01 / D-19: IniciarSesionCasoUso', () => {
 
     expect(motivo).toBe('ROL_NO_PERMITIDO');
     expect(sesiones.sesiones).toHaveLength(0);
+  });
+
+  describe('RF-USU-04 / D-20: bitácora de los ingresos', () => {
+    it('un ingreso correcto deja SESION_INICIADA con { rol, canal } y el id de la sesión, en la misma transacción', async () => {
+      const { sesiones, auditoria, casoUso } = preparar();
+
+      await casoUso.ejecutar({
+        canal: 'APP',
+        correo: CORREO_CLIENTE,
+        clave: CLAVE_VALIDA,
+      });
+
+      expect(auditoria.registradas).toEqual([
+        {
+          actividad: {
+            accion: 'SESION_INICIADA',
+            idUsuario: 'id-cliente',
+            entidad: 'SESION',
+            idEntidad: sesiones.sesiones[0].id,
+            detalle: { rol: 'CLIENTE', canal: 'APP' },
+          },
+          enTransaccion: true,
+          sinInterrumpir: false,
+        },
+      ]);
+    });
+
+    it('si la bitácora falla en un ingreso correcto, el ingreso falla (la transacción deshace la sesión)', async () => {
+      const { auditoria, emisor, casoUso } = preparar();
+      const fallo = new Error('bitácora no disponible');
+      auditoria.fallo = fallo;
+
+      await expect(
+        casoUso.ejecutar({
+          canal: 'APP',
+          correo: CORREO_CLIENTE,
+          clave: CLAVE_VALIDA,
+        }),
+      ).rejects.toBe(fallo);
+      expect(emisor.emitidos).toHaveLength(0);
+    });
+
+    it('D-20: clave incorrecta → SESION_FALLIDA con el correo intentado, el canal, el motivo y el id del usuario; nunca la clave; fuera de transacción', async () => {
+      const { auditoria, casoUso } = preparar();
+
+      await motivoDelFallo(
+        casoUso.ejecutar({
+          canal: 'PANEL',
+          correo: ' Cliente@Ejemplo.TEST',
+          clave: 'ClaveIntentada99',
+        }),
+      );
+
+      expect(auditoria.registradas).toEqual([
+        {
+          actividad: {
+            accion: 'SESION_FALLIDA',
+            idUsuario: 'id-cliente',
+            entidad: 'SESION',
+            idEntidad: null,
+            // La bitácora lo normaliza a minúsculas al guardarlo.
+            detalle: {
+              correo: ' Cliente@Ejemplo.TEST',
+              canal: 'PANEL',
+              motivo: 'CREDENCIALES_INVALIDAS',
+            },
+          },
+          enTransaccion: false,
+          sinInterrumpir: true,
+        },
+      ]);
+      expect(JSON.stringify(auditoria.registradas)).not.toContain(
+        'ClaveIntentada99',
+      );
+    });
+
+    it('D-20: correo inexistente → SESION_FALLIDA sin usuario (idUsuario null)', async () => {
+      const { auditoria, casoUso } = preparar();
+
+      await motivoDelFallo(
+        casoUso.ejecutar({
+          canal: 'APP',
+          correo: 'nadie@ejemplo.test',
+          clave: CLAVE_VALIDA,
+        }),
+      );
+
+      expect(auditoria.registradas[0].actividad).toMatchObject({
+        accion: 'SESION_FALLIDA',
+        idUsuario: null,
+        detalle: {
+          correo: 'nadie@ejemplo.test',
+          motivo: 'CREDENCIALES_INVALIDAS',
+        },
+      });
+    });
+
+    it('D-19 / D-20: Vendedor en APP → SESION_FALLIDA con motivo ROL_NO_PERMITIDO y su id', async () => {
+      const { auditoria, casoUso } = preparar();
+
+      await motivoDelFallo(
+        casoUso.ejecutar({
+          canal: 'APP',
+          correo: CORREO_VENDEDOR,
+          clave: CLAVE_VALIDA,
+        }),
+      );
+
+      expect(auditoria.registradas).toHaveLength(1);
+      expect(auditoria.registradas[0].actividad).toMatchObject({
+        accion: 'SESION_FALLIDA',
+        idUsuario: 'id-vendedor',
+        detalle: { canal: 'APP', motivo: 'ROL_NO_PERMITIDO' },
+      });
+      expect(JSON.stringify(auditoria.registradas)).not.toContain(CLAVE_VALIDA);
+    });
+
+    it('si la bitácora no está disponible, un ingreso fallido responde el mismo 401', async () => {
+      const { auditoria, casoUso } = preparar();
+      auditoria.fallo = new Error('bitácora no disponible');
+
+      await expect(
+        motivoDelFallo(
+          casoUso.ejecutar({
+            canal: 'APP',
+            correo: CORREO_CLIENTE,
+            clave: 'Otra2026',
+          }),
+        ),
+      ).resolves.toBe('CREDENCIALES_INVALIDAS');
+    });
   });
 
   it('D-19: con rol equivocado y clave incorrecta, el motivo es la clave (primero se verifica la clave)', async () => {

@@ -2,6 +2,7 @@ import { DatosInvalidosError } from '../../../../compartido/dominio/errores.js';
 import { GeneradorHashBcrypt } from '../../infraestructura/seguridad/generador-hash.bcrypt.js';
 import type { GeneradorHash } from '../puertos/generador-hash.puerto.js';
 import {
+  AuditoriaFalsa,
   AVISO_VIGENTE,
   crearCliente,
   crearVendedor,
@@ -10,6 +11,7 @@ import {
   generadorIdSecuencial,
   INICIO,
   RelojFalso,
+  UnidadDeTrabajoFalsa,
   UsuarioRepositorioEnMemoria,
 } from './dobles.prueba-spec.js';
 import {
@@ -28,15 +30,70 @@ const DATOS: DatosRegistrarCliente = {
 
 function preparar(generadorHash: GeneradorHash = new GeneradorHashFalso()) {
   const usuarios = new UsuarioRepositorioEnMemoria();
+  const unidad = new UnidadDeTrabajoFalsa();
+  const auditoria = new AuditoriaFalsa(unidad);
   const casoUso = new RegistrarClienteCasoUso(
     usuarios,
     generadorHash,
     new FuenteAvisoFalsa(),
     generadorIdSecuencial(),
     new RelojFalso(),
+    unidad,
+    auditoria,
   );
-  return { usuarios, casoUso };
+  return { usuarios, auditoria, unidad, casoUso };
 }
+
+describe('RF-USU-04: RegistrarClienteCasoUso registra USUARIO_REGISTRADO', () => {
+  it('Dado un registro correcto, entonces deja USUARIO_REGISTRADO con { rol: CLIENTE } en la misma transacción que el usuario', async () => {
+    const { auditoria, unidad, casoUso } = preparar();
+
+    const publico = await casoUso.ejecutar(DATOS);
+
+    expect(unidad.transacciones).toBe(1);
+    expect(auditoria.registradas).toEqual([
+      {
+        actividad: {
+          accion: 'USUARIO_REGISTRADO',
+          idUsuario: publico.id,
+          entidad: 'USUARIO',
+          idEntidad: publico.id,
+          detalle: { rol: 'CLIENTE' },
+        },
+        enTransaccion: true,
+        sinInterrumpir: false,
+      },
+    ]);
+    // Nunca la clave, el correo, el teléfono ni el nombre.
+    const texto = JSON.stringify(auditoria.registradas);
+    for (const prohibido of [DATOS.clave, 'maria', '0991234567', 'hash']) {
+      expect(texto.toLowerCase()).not.toContain(prohibido.toLowerCase());
+    }
+  });
+
+  it('si la bitácora falla, el registro falla (en la base, la transacción deshace el usuario)', async () => {
+    const { auditoria, casoUso } = preparar();
+    const fallo = new Error('bitácora no disponible');
+    auditoria.fallo = fallo;
+
+    await expect(casoUso.ejecutar(DATOS)).rejects.toBe(fallo);
+  });
+
+  it('un registro rechazado (datos inválidos o correo repetido) no deja registro', async () => {
+    const { usuarios, auditoria, casoUso } = preparar();
+    usuarios.usuarios.push(
+      crearCliente('ya-existe', 'maria.zambrano@correo.com'),
+    );
+
+    await expect(
+      casoUso.ejecutar({ ...DATOS, nombre: 'A' }),
+    ).rejects.toBeInstanceOf(DatosInvalidosError);
+    await expect(casoUso.ejecutar(DATOS)).rejects.toMatchObject({
+      codigo: 'CORREO_YA_REGISTRADO',
+    });
+    expect(auditoria.registradas).toHaveLength(0);
+  });
+});
 
 describe('RF-USU-01 / CA-01 / D-07 / D-11: RegistrarClienteCasoUso', () => {
   it('Dado datos válidos, cuando se registra, entonces crea un CLIENTE con datos normalizados y aceptación del aviso', async () => {

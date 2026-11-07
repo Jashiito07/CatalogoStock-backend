@@ -1,4 +1,6 @@
 import type { Reloj } from '../../../../compartido/aplicacion/reloj.puerto.js';
+import type { UnidadDeTrabajo } from '../../../../compartido/aplicacion/unidad-trabajo.puerto.js';
+import type { ServicioAuditoria } from '../../../auditoria/index.js';
 import type { GeneradorTokenRenovacion } from '../puertos/generador-token-renovacion.puerto.js';
 import type { SesionRepositorio } from '../puertos/sesion.repositorio.js';
 
@@ -21,6 +23,8 @@ export class CerrarSesionCasoUso {
     private readonly sesiones: SesionRepositorio,
     private readonly generadorToken: GeneradorTokenRenovacion,
     private readonly reloj: Reloj,
+    private readonly unidadTrabajo: UnidadDeTrabajo,
+    private readonly auditoria: ServicioAuditoria,
   ) {}
 
   async ejecutar(datos: DatosCerrarSesion): Promise<void> {
@@ -30,12 +34,24 @@ export class CerrarSesionCasoUso {
     if (sesion === null || !sesion.perteneceA(datos.idUsuario)) {
       return;
     }
-    await this.sesiones.revocarFamilia(
-      sesion.familia,
-      'CERRADA',
-      this.reloj.ahora(),
-    );
-    // PENDIENTE (subfase 1.5): `SESION_CERRADA` con `idUsuario`, entidad
-    // `SESION`, `idEntidad: sesion.id` y `detalle: {}`.
+    // RF-USU-04: la revocación y su `SESION_CERRADA` se guardan juntas o
+    // ninguna. Repetir la salida con una familia ya revocada no cambia nada
+    // y no deja otro registro.
+    await this.unidadTrabajo.ejecutar(async () => {
+      const revocadas = await this.sesiones.revocarFamilia(
+        sesion.familia,
+        'CERRADA',
+        this.reloj.ahora(),
+      );
+      if (revocadas > 0) {
+        await this.auditoria.registrar({
+          accion: 'SESION_CERRADA',
+          idUsuario: datos.idUsuario,
+          entidad: 'SESION',
+          idEntidad: sesion.id,
+          detalle: {},
+        });
+      }
+    });
   }
 }

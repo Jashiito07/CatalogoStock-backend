@@ -1,5 +1,6 @@
 import { CerrarSesionCasoUso } from './cerrar-sesion.caso-uso.js';
 import {
+  AuditoriaFalsa,
   CLAVE_VALIDA,
   CONFIGURACION,
   crearCliente,
@@ -9,6 +10,7 @@ import {
   GeneradorTokenFalso,
   RelojFalso,
   SesionRepositorioEnMemoria,
+  UnidadDeTrabajoFalsa,
   UsuarioRepositorioEnMemoria,
 } from './dobles.prueba-spec.js';
 import { IniciarSesionCasoUso } from './iniciar-sesion.caso-uso.js';
@@ -25,6 +27,8 @@ function preparar() {
   const tokens = new GeneradorTokenFalso();
   const ids = generadorIdSecuencial();
   const emisor = new EmisorTokenAccesoFalso();
+  const unidad = new UnidadDeTrabajoFalsa();
+  const auditoria = new AuditoriaFalsa(unidad);
   const iniciar = new IniciarSesionCasoUso(
     usuarios,
     sesiones,
@@ -34,6 +38,8 @@ function preparar() {
     ids,
     reloj,
     CONFIGURACION,
+    unidad,
+    auditoria,
   );
   const renovar = new RenovarSesionCasoUso(
     usuarios,
@@ -43,12 +49,69 @@ function preparar() {
     ids,
     reloj,
     CONFIGURACION,
+    auditoria,
   );
-  const cerrar = new CerrarSesionCasoUso(sesiones, tokens, reloj);
+  const cerrar = new CerrarSesionCasoUso(
+    sesiones,
+    tokens,
+    reloj,
+    unidad,
+    auditoria,
+  );
   const ingresar = (correo: string) =>
     iniciar.ejecutar({ canal: 'APP', correo, clave: CLAVE_VALIDA });
-  return { sesiones, reloj, renovar, cerrar, ingresar };
+  return { sesiones, reloj, renovar, cerrar, ingresar, auditoria };
 }
+
+describe('RF-USU-04: CerrarSesionCasoUso registra SESION_CERRADA', () => {
+  it('al cerrar deja SESION_CERRADA con el usuario, la sesión del token y detalle {}, en la misma transacción', async () => {
+    const { cerrar, ingresar, auditoria, sesiones } = preparar();
+    const sesion = await ingresar('ana@ejemplo.test');
+
+    await cerrar.ejecutar({
+      idUsuario: 'id-ana',
+      tokenRenovacion: sesion.tokenRenovacion,
+    });
+
+    expect(auditoria.registradas.at(-1)).toEqual({
+      actividad: {
+        accion: 'SESION_CERRADA',
+        idUsuario: 'id-ana',
+        entidad: 'SESION',
+        idEntidad: sesiones.sesiones[0].id,
+        detalle: {},
+      },
+      enTransaccion: true,
+      sinInterrumpir: false,
+    });
+  });
+
+  it('repetir la salida, un token desconocido o uno de otro usuario no dejan registro', async () => {
+    const { cerrar, ingresar, auditoria } = preparar();
+    const deAna = await ingresar('ana@ejemplo.test');
+    const deBeto = await ingresar('beto@ejemplo.test');
+    await cerrar.ejecutar({
+      idUsuario: 'id-ana',
+      tokenRenovacion: deAna.tokenRenovacion,
+    });
+
+    await cerrar.ejecutar({
+      idUsuario: 'id-ana',
+      tokenRenovacion: deAna.tokenRenovacion,
+    });
+    await cerrar.ejecutar({ idUsuario: 'id-ana', tokenRenovacion: 'otro' });
+    await cerrar.ejecutar({
+      idUsuario: 'id-ana',
+      tokenRenovacion: deBeto.tokenRenovacion,
+    });
+
+    expect(auditoria.acciones()).toEqual([
+      'SESION_INICIADA',
+      'SESION_INICIADA',
+      'SESION_CERRADA',
+    ]);
+  });
+});
 
 describe('RF-USU-01 / D-09: CerrarSesionCasoUso', () => {
   it('revoca la familia del token y después la renovación falla', async () => {
