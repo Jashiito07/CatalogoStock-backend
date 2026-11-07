@@ -6,6 +6,7 @@
 export type CategoriaErrorDominio =
   | 'DATOS_INVALIDOS'
   | 'NO_AUTENTICADO'
+  | 'NO_AUTORIZADO'
   | 'NO_ENCONTRADO'
   | 'CONFLICTO'
   | 'REGLA_NEGOCIO';
@@ -43,6 +44,22 @@ export class DatosInvalidosError extends ErrorDominio {
  */
 export class NoAutenticadoError extends ErrorDominio {
   readonly categoria = 'NO_AUTENTICADO';
+}
+
+export const MENSAJE_NO_AUTORIZADO =
+  'No tiene permiso para realizar esta acción.';
+
+/**
+ * La identidad es válida, pero su rol no tiene permiso para la operación
+ * (HTTP 403 `NO_AUTORIZADO`, RF-USU-03, CA-02). Mensaje único: no revela qué
+ * rol haría falta.
+ */
+export class NoAutorizadoError extends ErrorDominio {
+  readonly categoria = 'NO_AUTORIZADO';
+
+  constructor() {
+    super('NO_AUTORIZADO', MENSAJE_NO_AUTORIZADO);
+  }
 }
 
 /** El recurso no existe o no pertenece al usuario (HTTP 404). */

@@ -12,6 +12,7 @@ import { RelojSistema } from '../../compartido/infraestructura/reloj-sistema.js'
 import type { VariablesEntorno } from '../../configuracion/variables-entorno.js';
 import { CerrarSesionCasoUso } from './aplicacion/casos-uso/cerrar-sesion.caso-uso.js';
 import { ConsultarAvisoPrivacidadCasoUso } from './aplicacion/casos-uso/consultar-aviso-privacidad.caso-uso.js';
+import { ConsultarUsuarioActualCasoUso } from './aplicacion/casos-uso/consultar-usuario-actual.caso-uso.js';
 import { CrearVendedorCasoUso } from './aplicacion/casos-uso/crear-vendedor.caso-uso.js';
 import { IniciarSesionCasoUso } from './aplicacion/casos-uso/iniciar-sesion.caso-uso.js';
 import { RegistrarClienteCasoUso } from './aplicacion/casos-uso/registrar-cliente.caso-uso.js';
@@ -56,7 +57,6 @@ import {
 import { GeneradorHashBcrypt } from './infraestructura/seguridad/generador-hash.bcrypt.js';
 import { GeneradorTokenRenovacionCrypto } from './infraestructura/seguridad/generador-token-renovacion.crypto.js';
 import { AutenticacionController } from './presentacion/http/autenticacion.controller.js';
-import { GuardTokenAcceso } from './presentacion/http/guard-token-acceso.js';
 import { PrivacidadController } from './presentacion/http/privacidad.controller.js';
 import { UsuariosController } from './presentacion/http/usuarios.controller.js';
 
@@ -67,7 +67,10 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
  * - 1.2: modelo, roles, hash de claves y Vendedor semilla.
  * - 1.3: registro del Cliente, ingreso por canal, renovación con rotación,
  *   salida y aviso de privacidad.
- * - 1.4 (pendiente): guard global de autenticación y roles, `GET /usuarios/yo`.
+ * - 1.4: `GET /usuarios/yo`, guards de autenticación y de roles, `@Roles`,
+ *   `@UsuarioActual` y la regla de propiedad. Los guards se registran como
+ *   globales en `ProteccionRutasModule`, no aquí: así el comando
+ *   `crear-vendedor`, que importa este módulo, no carga guards HTTP.
  */
 @Module({
   imports: [
@@ -125,7 +128,6 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
     },
     { provide: GENERADOR_ID, useClass: GeneradorIdUuid },
     { provide: RELOJ, useClass: RelojSistema },
-    GuardTokenAcceso,
     {
       provide: CrearVendedorCasoUso,
       inject: [USUARIO_REPOSITORIO, GENERADOR_HASH, GENERADOR_ID, RELOJ],
@@ -239,8 +241,15 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
       useFactory: (fuente: FuenteAvisoPrivacidad) =>
         new ConsultarAvisoPrivacidadCasoUso(fuente),
     },
+    {
+      provide: ConsultarUsuarioActualCasoUso,
+      inject: [USUARIO_REPOSITORIO],
+      useFactory: (usuarios: UsuarioRepositorio) =>
+        new ConsultarUsuarioActualCasoUso(usuarios),
+    },
   ],
-  // GuardTokenAcceso y EMISOR_TOKEN_ACCESO se exportan para el guard global de 1.4.
-  exports: [CrearVendedorCasoUso, GuardTokenAcceso, EMISOR_TOKEN_ACCESO],
+  // EMISOR_TOKEN_ACCESO se exporta para el guard global de autenticación,
+  // que se registra en `ProteccionRutasModule` (subfase 1.4).
+  exports: [CrearVendedorCasoUso, EMISOR_TOKEN_ACCESO],
 })
 export class UsuariosModule {}

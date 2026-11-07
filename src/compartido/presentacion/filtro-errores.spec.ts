@@ -10,6 +10,7 @@ import {
   ConflictoError,
   DatosInvalidosError,
   NoAutenticadoError,
+  NoAutorizadoError,
   NoEncontradoError,
   ReglaNegocioError,
 } from '../dominio/errores.js';
@@ -26,6 +27,7 @@ describe('FiltroErrores: formato { codigo, mensaje, detalles } del contrato', ()
         'DATOS_INVALIDOS',
       ],
       [new NoEncontradoError('Pedido no encontrado'), 404, 'NO_ENCONTRADO'],
+      [new NoAutorizadoError(), 403, 'NO_AUTORIZADO'],
       [
         new NoAutenticadoError(
           'CREDENCIALES_INVALIDAS',

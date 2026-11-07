@@ -1,4 +1,4 @@
-import type { INestApplication } from '@nestjs/common';
+import type { INestApplication, Type } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import {
   getStorageToken,
@@ -40,15 +40,29 @@ export interface AppPruebas {
   cerrar(): Promise<void>;
 }
 
+export interface OpcionesAppPruebas {
+  /**
+   * Controladores que existen **solo** en las pruebas (nunca en `src/`), por
+   * ejemplo una ruta del Vendedor para verificar CA-02 antes de que exista la
+   * primera ruta administrativa real. Quedan bajo los mismos guards globales.
+   */
+  controladoresPrueba?: Type[];
+}
+
 /**
  * Levanta la API completa (AppModule, misma configuración HTTP que
  * producción) contra la base `catalogostock_pruebas` (D-23).
  */
-export async function crearAppPruebas(): Promise<AppPruebas> {
+export async function crearAppPruebas(
+  opciones: OpcionesAppPruebas = {},
+): Promise<AppPruebas> {
   asegurarBasePruebas(process.env.BD_NOMBRE);
   const almacen = new AlmacenLimiteReiniciable();
 
-  const modulo = await Test.createTestingModule({ imports: [AppModule] })
+  const modulo = await Test.createTestingModule({
+    imports: [AppModule],
+    controllers: opciones.controladoresPrueba ?? [],
+  })
     // La conexión se abre aquí, de forma síncrona, en lugar de en segundo plano.
     .overrideProvider(ConexionBaseDatosServicio)
     .useValue({})
