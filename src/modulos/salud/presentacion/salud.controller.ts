@@ -1,4 +1,5 @@
 import { Controller, Get, Inject } from '@nestjs/common';
+import { Publico } from '../../../compartido/presentacion/publico.js';
 import { ConsultarSaludCasoUso } from '../aplicacion/casos-uso/consultar-salud.caso-uso.js';
 import type { EstadoBaseDatos } from '../dominio/estado-salud.js';
 
@@ -10,8 +11,8 @@ export interface RespuestaSalud {
 }
 
 /**
- * GET /api/v1/salud — público (no requiere autenticación).
- * Cuando exista el guard global de autenticación (F1) debe marcarse `@Publico()`.
+ * GET /api/v1/salud — público (no requiere autenticación): `@Publico()` lo
+ * excluye del guard global de autenticación (subfase 1.4).
  */
 @Controller('salud')
 export class SaludController {
@@ -21,6 +22,7 @@ export class SaludController {
   ) {}
 
   @Get()
+  @Publico()
   async consultar(): Promise<RespuestaSalud> {
     const salud = await this.consultarSalud.ejecutar();
     return {

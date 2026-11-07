@@ -5,17 +5,17 @@ import {
   HttpStatus,
   Inject,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import { LimiteIntentos } from '../../../../compartido/presentacion/limite-intentos.js';
+import { Publico } from '../../../../compartido/presentacion/publico.js';
 import { CerrarSesionCasoUso } from '../../aplicacion/casos-uso/cerrar-sesion.caso-uso.js';
 import { IniciarSesionCasoUso } from '../../aplicacion/casos-uso/iniciar-sesion.caso-uso.js';
 import { RenovarSesionCasoUso } from '../../aplicacion/casos-uso/renovar-sesion.caso-uso.js';
-import type { IdentidadTokenAcceso } from '../../aplicacion/puertos/emisor-token-acceso.puerto.js';
 import type { Canal } from '../../dominio/canal.js';
+import type { ActorAutenticado } from '../../dominio/propiedad.js';
 import { IngresoDto, TokenRenovacionDto } from './dto/autenticacion.dto.js';
-import { GuardTokenAcceso, UsuarioAutenticado } from './guard-token-acceso.js';
 import { aRespuestaSesion, type RespuestaSesion } from './respuestas.js';
+import { UsuarioActual } from './usuario-actual.js';
 
 /**
  * Sesión: ingreso por canal, renovación y salida (RF-USU-01, CA-01, D-09, D-19).
@@ -32,16 +32,18 @@ export class AutenticacionController {
     private readonly cerrarSesion: CerrarSesionCasoUso,
   ) {}
 
-  /** POST /api/v1/autenticacion/ingreso/cliente — app móvil, solo Clientes (D-19). */
+  /** POST /api/v1/autenticacion/ingreso/cliente — público; app móvil, solo Clientes (D-19). */
   @Post('ingreso/cliente')
+  @Publico()
   @HttpCode(HttpStatus.OK)
   @LimiteIntentos('INGRESO')
   ingresarCliente(@Body() cuerpo: IngresoDto): Promise<RespuestaSesion> {
     return this.ingresar('APP', cuerpo);
   }
 
-  /** POST /api/v1/autenticacion/ingreso/vendedor — panel web, solo el Vendedor (D-19). */
+  /** POST /api/v1/autenticacion/ingreso/vendedor — público; panel web, solo el Vendedor (D-19). */
   @Post('ingreso/vendedor')
+  @Publico()
   @HttpCode(HttpStatus.OK)
   @LimiteIntentos('INGRESO')
   ingresarVendedor(@Body() cuerpo: IngresoDto): Promise<RespuestaSesion> {
@@ -50,6 +52,7 @@ export class AutenticacionController {
 
   /** POST /api/v1/autenticacion/renovacion — público, con el token de renovación (D-09). */
   @Post('renovacion')
+  @Publico()
   @HttpCode(HttpStatus.OK)
   @LimiteIntentos('RENOVACION')
   async renovar(@Body() cuerpo: TokenRenovacionDto): Promise<RespuestaSesion> {
@@ -59,18 +62,18 @@ export class AutenticacionController {
   }
 
   /**
-   * POST /api/v1/autenticacion/salida — autenticado (Cliente o Vendedor).
-   * Revoca la familia del token indicado; idempotente → 204 sin cuerpo.
+   * POST /api/v1/autenticacion/salida — autenticado (Cliente o Vendedor) por el
+   * guard global (no es `@Publico()`). Revoca la familia del token indicado;
+   * idempotente → 204 sin cuerpo.
    */
   @Post('salida')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(GuardTokenAcceso)
   async salir(
-    @UsuarioAutenticado() identidad: IdentidadTokenAcceso,
+    @UsuarioActual() actor: ActorAutenticado,
     @Body() cuerpo: TokenRenovacionDto,
   ): Promise<void> {
     await this.cerrarSesion.ejecutar({
-      idUsuario: identidad.idUsuario,
+      idUsuario: actor.id,
       tokenRenovacion: cuerpo.tokenRenovacion,
     });
   }
