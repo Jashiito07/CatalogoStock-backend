@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verificacion:
+    name: Lint, pruebas y build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      # Base temporal solo para CI (D-23: el nombre termina en _pruebas).
+      # La clave es falsa y solo existe dentro de este contenedor efímero.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: catalogostock
+          POSTGRES_PASSWORD: clave_solo_ci
+          POSTGRES_DB: catalogostock_pruebas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U catalogostock"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Lint (oxlint)
+        run: npm run lint
+      - name: Pruebas unitarias
+        run: npm test
+      - name: Configurar la base de pruebas
+        run: |
+          printf 'BD_HOST=127.0.0.1\nBD_PUERTO=5432\nBD_NOMBRE=catalogostock_pruebas\nBD_USUARIO=catalogostock\nBD_CLAVE=clave_solo_ci\n' > .env.pruebas
+      - name: Pruebas e2e
+        run: npm run test:e2e
+      - name: Build
+        run: npm run build
