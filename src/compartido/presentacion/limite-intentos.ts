@@ -26,6 +26,9 @@ export const GRUPOS_LIMITE_INTENTOS = {
   INGRESO: { limite: 5, ventanaMs: 60_000 },
   REGISTRO: { limite: 3, ventanaMs: 60_000 },
   RENOVACION: { limite: 10, ventanaMs: 60_000 },
+  // RF-USU-05 (contrato de recuperación de clave): 5 por minuto cada una.
+  RECUPERACION: { limite: 5, ventanaMs: 60_000 },
+  CAMBIO_CLAVE: { limite: 5, ventanaMs: 60_000 },
 } as const;
 
 export type GrupoLimiteIntentos = keyof typeof GRUPOS_LIMITE_INTENTOS;

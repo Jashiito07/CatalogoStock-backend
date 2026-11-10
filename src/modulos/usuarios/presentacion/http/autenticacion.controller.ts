@@ -10,10 +10,12 @@ import { LimiteIntentos } from '../../../../compartido/presentacion/limite-inten
 import { Publico } from '../../../../compartido/presentacion/publico.js';
 import { CerrarSesionCasoUso } from '../../aplicacion/casos-uso/cerrar-sesion.caso-uso.js';
 import { IniciarSesionCasoUso } from '../../aplicacion/casos-uso/iniciar-sesion.caso-uso.js';
+import { RecuperarClaveCasoUso } from '../../aplicacion/casos-uso/recuperar-clave.caso-uso.js';
 import { RenovarSesionCasoUso } from '../../aplicacion/casos-uso/renovar-sesion.caso-uso.js';
 import type { Canal } from '../../dominio/canal.js';
 import type { ActorAutenticado } from '../../dominio/propiedad.js';
 import { IngresoDto, TokenRenovacionDto } from './dto/autenticacion.dto.js';
+import { RecuperacionClaveDto } from './dto/clave.dto.js';
 import { aRespuestaSesion, type RespuestaSesion } from './respuestas.js';
 import { UsuarioActual } from './usuario-actual.js';
 
@@ -30,6 +32,8 @@ export class AutenticacionController {
     private readonly renovarSesion: RenovarSesionCasoUso,
     @Inject(CerrarSesionCasoUso)
     private readonly cerrarSesion: CerrarSesionCasoUso,
+    @Inject(RecuperarClaveCasoUso)
+    private readonly recuperarClave: RecuperarClaveCasoUso,
   ) {}
 
   /** POST /api/v1/autenticacion/ingreso/cliente — público; app móvil, solo Clientes (D-19). */
@@ -59,6 +63,23 @@ export class AutenticacionController {
     return aRespuestaSesion(
       await this.renovarSesion.ejecutar(cuerpo.tokenRenovacion),
     );
+  }
+
+  /**
+   * POST /api/v1/autenticacion/recuperacion — público (RF-USU-05, D-35). El
+   * Cliente cambia su clave olvidada con el código del Vendedor → 204. Ante
+   * cualquier fallo, el mismo 422 `CODIGO_INVALIDO`. 5 por minuto por IP (D-17).
+   */
+  @Post('recuperacion')
+  @Publico()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @LimiteIntentos('RECUPERACION')
+  async recuperar(@Body() cuerpo: RecuperacionClaveDto): Promise<void> {
+    await this.recuperarClave.ejecutar({
+      correo: cuerpo.correo,
+      codigo: cuerpo.codigo,
+      claveNueva: cuerpo.claveNueva,
+    });
   }
 
   /**

@@ -155,6 +155,17 @@ describe('Catálogo de la bitácora (contrato de auditoría)', () => {
     expect(ENTIDAD_DE_LA_ACCION.SESION_FALLIDA).toBe('SESION');
   });
 
+  it('RF-USU-05: las cuatro acciones de recuperación y cambio de clave afectan a un USUARIO', () => {
+    for (const accion of [
+      'CODIGO_RECUPERACION_GENERADO',
+      'CLAVE_RESTABLECIDA',
+      'RECUPERACION_FALLIDA',
+      'CLAVE_CAMBIADA',
+    ] as const) {
+      expect(ENTIDAD_DE_LA_ACCION[accion]).toBe('USUARIO');
+    }
+  });
+
   it('reconoce solo valores del catálogo', () => {
     expect(esAccionAuditoria('SESION_CERRADA')).toBe(true);
     expect(esAccionAuditoria('sesion_cerrada')).toBe(false);

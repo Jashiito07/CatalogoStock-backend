@@ -37,13 +37,17 @@ describe('D-17: límite de intentos por IP', () => {
     return encontrado;
   };
 
-  it('ingreso 5, registro 3 y renovación 10 por minuto', () => {
+  it('ingreso 5, registro 3, renovación 10, recuperación 5 y cambio de clave 5 por minuto', () => {
     expect(GRUPOS_LIMITE_INTENTOS).toEqual({
       INGRESO: { limite: 5, ventanaMs: 60_000 },
       REGISTRO: { limite: 3, ventanaMs: 60_000 },
       RENOVACION: { limite: 10, ventanaMs: 60_000 },
+      RECUPERACION: { limite: 5, ventanaMs: 60_000 },
+      CAMBIO_CLAVE: { limite: 5, ventanaMs: 60_000 },
     });
     expect(limitador('INGRESO')).toMatchObject({ limit: 5, ttl: 60_000 });
+    expect(limitador('RECUPERACION')).toMatchObject({ limit: 5, ttl: 60_000 });
+    expect(limitador('CAMBIO_CLAVE')).toMatchObject({ limit: 5, ttl: 60_000 });
   });
 
   it('cada limitador solo cuenta las rutas de su grupo; las rutas sin grupo no tienen límite', () => {

@@ -208,8 +208,23 @@ describe('Seguridad / D-20: salvaguarda del detalle de la bitácora', () => {
       expect(JSON.stringify(resultado)).not.toContain('Catalogo2026');
     });
 
+    it('RF-USU-05: RECUPERACION_FALLIDA también guarda el correo intentado normalizado', () => {
+      expect(
+        sanearDetalle('RECUPERACION_FALLIDA', {
+          correo: ' Maria@Correo.COM ',
+          motivo: 'CODIGO_INCORRECTO',
+          claveNueva: 'NuevaClave2026',
+        }).detalle,
+      ).toEqual({ correo: 'maria@correo.com', motivo: 'CODIGO_INCORRECTO' });
+    });
+
     it('en cualquier otra acción el correo se elimina', () => {
-      for (const accion of ['SESION_INICIADA', 'ACCESO_DENEGADO'] as const) {
+      for (const accion of [
+        'SESION_INICIADA',
+        'ACCESO_DENEGADO',
+        'CLAVE_RESTABLECIDA',
+        'CODIGO_RECUPERACION_GENERADO',
+      ] as const) {
         expect(
           sanearDetalle(accion, { correo: 'maria@correo.com' }).detalle,
         ).toEqual({});

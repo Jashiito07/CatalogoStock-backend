@@ -9,7 +9,8 @@ import {
 import { UsuariosModule } from '../modulos/usuarios/index.js';
 
 /**
- * Contexto de NestJS (sin HTTP) para `npm run crear-vendedor` (D-07).
+ * Contexto de NestJS (sin HTTP) para `npm run crear-vendedor` (D-07) y
+ * `npm run restablecer-clave-vendedor` (RF-USU-05, D-35).
  *
  * A diferencia de la API, aquí la conexión con PostgreSQL se abre al iniciar
  * (sin `manualInitialization`) y con un solo reintento: si la base no

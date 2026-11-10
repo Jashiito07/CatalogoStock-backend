@@ -1,8 +1,20 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { In, type Repository } from 'typeorm';
+import {
+  desplazamiento,
+  type Paginacion,
+} from '../../../../compartido/dominio/paginacion.js';
 import { repositorioEnCurso } from '../../../../compartido/infraestructura/unidad-trabajo.typeorm.js';
-import type { UsuarioRepositorio } from '../../aplicacion/puertos/usuario.repositorio.js';
+import type {
+  PaginaUsuarios,
+  UsuarioRepositorio,
+} from '../../aplicacion/puertos/usuario.repositorio.js';
+import {
+  type BusquedaClientes,
+  LETRAS_CON_TILDE,
+  LETRAS_SIN_TILDE,
+} from '../../dominio/busqueda-clientes.js';
 import type { Correo } from '../../dominio/correo.js';
 import {
   CorreoYaRegistradoError,
@@ -55,6 +67,11 @@ export function esSegundoVendedor(error: unknown): boolean {
   return restriccionUnicaViolada(error) === RESTRICCION_UN_VENDEDOR;
 }
 
+/** Escapa `\`, `%` y `_` para usar el texto literal en `LIKE … ESCAPE '\'`. */
+export function escaparComodinesLike(texto: string): string {
+  return texto.replace(/[\\%_]/g, (caracter) => `\\${caracter}`);
+}
+
 /** Adaptador TypeORM del puerto UsuarioRepositorio (tabla `usuarios`). */
 @Injectable()
 export class UsuarioRepositorioTypeorm implements UsuarioRepositorio {
@@ -86,8 +103,68 @@ export class UsuarioRepositorioTypeorm implements UsuarioRepositorio {
     return fila ? UsuarioMapeador.aDominio(fila) : null;
   }
 
+  async buscarVendedor(): Promise<Usuario | null> {
+    const fila = await this.filas.findOneBy({ rol: 'VENDEDOR' });
+    return fila ? UsuarioMapeador.aDominio(fila) : null;
+  }
+
   existeConRol(rol: Rol): Promise<boolean> {
     return this.filas.existsBy({ rol });
+  }
+
+  async actualizarClave(
+    idUsuario: string,
+    hashClave: string,
+    ahora: Date,
+  ): Promise<void> {
+    await this.filas.update(
+      { id: idUsuario },
+      { hashClave, fechaActualizacion: ahora },
+    );
+  }
+
+  /**
+   * Búsqueda sin mayúsculas ni tildes con `translate(lower(…))` y la misma
+   * tabla de letras que el dominio (sin la extensión `unaccent`). Los
+   * comodines de LIKE escritos por el usuario (`%`, `_`, `\`) se escapan.
+   */
+  async listarClientes(
+    busqueda: BusquedaClientes | null,
+    paginacion: Paginacion,
+  ): Promise<PaginaUsuarios> {
+    const consulta = this.filas
+      .createQueryBuilder('u')
+      .where('u.rol = :rol', { rol: 'CLIENTE' });
+
+    if (busqueda !== null) {
+      const condiciones = [
+        `translate(lower(u.nombre), :conTilde, :sinTilde) LIKE :patron ESCAPE '\\'`,
+        `translate(lower(u.correo), :conTilde, :sinTilde) LIKE :patron ESCAPE '\\'`,
+        `u.telefono LIKE :patron ESCAPE '\\'`,
+      ];
+      const parametros: Record<string, string> = {
+        conTilde: LETRAS_CON_TILDE,
+        sinTilde: LETRAS_SIN_TILDE,
+        patron: `%${escaparComodinesLike(busqueda.texto)}%`,
+      };
+      if (busqueda.telefonoInternacional !== null) {
+        condiciones.push(`u.telefono LIKE :patronTelefono ESCAPE '\\'`);
+        parametros.patronTelefono = `%${escaparComodinesLike(busqueda.telefonoInternacional)}%`;
+      }
+      consulta.andWhere(`(${condiciones.join(' OR ')})`, parametros);
+    }
+
+    const [filas, total] = await consulta
+      // `id` desempata clientes creados en el mismo instante: orden estable entre páginas.
+      .orderBy('u.fechaCreacion', 'DESC')
+      .addOrderBy('u.id', 'DESC')
+      .offset(desplazamiento(paginacion))
+      .limit(paginacion.tamanio)
+      .getManyAndCount();
+    return {
+      usuarios: filas.map((fila) => UsuarioMapeador.aDominio(fila)),
+      total,
+    };
   }
 
   async crear(usuario: Usuario): Promise<void> {

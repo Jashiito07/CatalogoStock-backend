@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { IsNull, type Repository } from 'typeorm';
+import { IsNull, MoreThan, Not, type Repository } from 'typeorm';
 import type { SesionRepositorio } from '../../aplicacion/puertos/sesion.repositorio.js';
 import type { MotivoRevocacion, Sesion } from '../../dominio/sesion.js';
 import { repositorioEnCurso } from '../../../../compartido/infraestructura/unidad-trabajo.typeorm.js';
@@ -63,6 +63,29 @@ export class SesionRepositorioTypeorm implements SesionRepositorio {
     const resultado = await this.filas.update(
       { familia, fechaRevocacion: IsNull() },
       { fechaRevocacion: ahora, motivoRevocacion: motivo },
+    );
+    return resultado.affected ?? 0;
+  }
+
+  /**
+   * RF-USU-05: solo cuenta y revoca las sesiones que todavía servían (sin
+   * revocar y sin vencer). `familiaConservada` deja intacta la sesión actual.
+   */
+  async revocarDeUsuario(
+    idUsuario: string,
+    ahora: Date,
+    familiaConservada?: string,
+  ): Promise<number> {
+    const resultado = await this.filas.update(
+      {
+        idUsuario,
+        fechaRevocacion: IsNull(),
+        fechaVencimiento: MoreThan(ahora),
+        ...(familiaConservada === undefined
+          ? {}
+          : { familia: Not(familiaConservada) }),
+      },
+      { fechaRevocacion: ahora, motivoRevocacion: 'CERRADA' },
     );
     return resultado.affected ?? 0;
   }

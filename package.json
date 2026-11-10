@@ -25,7 +25,8 @@
     "migracion:generar": "nest build && typeorm migration:generate --pretty -d dist/configuracion/fuente-datos.js",
     "migracion:ejecutar": "nest build && typeorm migration:run -d dist/configuracion/fuente-datos.js",
     "migracion:revertir": "nest build && typeorm migration:revert -d dist/configuracion/fuente-datos.js",
-    "crear-vendedor": "nest build && node dist/comandos/crear-vendedor.js"
+    "crear-vendedor": "nest build && node dist/comandos/crear-vendedor.js",
+    "restablecer-clave-vendedor": "nest build && node dist/comandos/restablecer-clave-vendedor.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",

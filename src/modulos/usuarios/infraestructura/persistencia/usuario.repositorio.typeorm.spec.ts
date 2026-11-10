@@ -10,6 +10,7 @@ import { Usuario } from '../../dominio/usuario.js';
 import { UsuarioMapeador } from './usuario.mapeador.js';
 import { UsuarioOrmEntity } from './usuario.orm-entity.js';
 import {
+  escaparComodinesLike,
   esCorreoDuplicado,
   esSegundoVendedor,
   restriccionUnicaViolada,
@@ -226,5 +227,12 @@ describe('D-21: esSegundoVendedor', () => {
         driverError: { code: '23505', constraint: 1 },
       }),
     ).toBeUndefined();
+  });
+});
+
+describe('RF-USU-05: búsqueda de clientes con LIKE', () => {
+  it('escapa los comodines escritos por el usuario', () => {
+    expect(escaparComodinesLike('50%_a\\b')).toBe('50\\%\\_a\\\\b');
+    expect(escaparComodinesLike('maria')).toBe('maria');
   });
 });

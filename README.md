@@ -54,8 +54,10 @@ inválida, la API no inicia y el error solo nombra la variable, nunca su valor.
 | `JWT_SECRETO` | Secreto de firma de los tokens de acceso (JWT HS256). Mínimo 32 caracteres aleatorios | ver `.env.example` |
 | `JWT_VIDA_ACCESO_SEGUNDOS` | Opcional. Vida del token de acceso (60 a 3600; por defecto 900 = 15 min, D-09) | `900` |
 | `RENOVACION_VIDA_DIAS` | Opcional. Vida del token de renovación (1 a 30; por defecto 7, D-09) | `7` |
+| `RECUPERACION_SECRETO` | Secreto del HMAC-SHA256 de los códigos de recuperación (RF-USU-05). Mínimo 32 caracteres aleatorios, distinto de `JWT_SECRETO` | ver `.env.example` |
 | `PROXY_SALTOS_CONFIABLES` | Opcional. Proxies de confianza delante de la API (`trust proxy`; 0 a 5, por defecto 0). En producción detrás de un proxy TLS: `1` (D-17) | `0` |
 | `VENDEDOR_NOMBRE`, `VENDEDOR_CORREO`, `VENDEDOR_TELEFONO`, `VENDEDOR_CLAVE` | Solo para `npm run crear-vendedor`; la API no las usa | ver `.env.example` |
+| `VENDEDOR_CLAVE_NUEVA` | Solo para `npm run restablecer-clave-vendedor`; se define en la terminal, nunca en `.env` | — |
 
 ## Comandos
 
@@ -72,6 +74,7 @@ inválida, la API no inicia y el error solo nombra la variable, nunca su valor.
 | `npm run migracion:ejecutar` | Compila y aplica las migraciones pendientes |
 | `npm run migracion:revertir` | Compila y revierte la última migración |
 | `npm run crear-vendedor` | Compila y crea el único Vendedor si aún no existe ninguno (D-07, PA-09) |
+| `npm run restablecer-clave-vendedor` | Compila y cambia la clave del Vendedor con `VENDEDOR_CLAVE_NUEVA` (RF-USU-05, D-35) |
 
 ### Crear el Vendedor (D-07, PA-09)
 
@@ -95,11 +98,49 @@ npm run crear-vendedor
   nombra la variable que hay que corregir (código de salida 1).
 - Nunca muestra la clave, su hash, el correo ni el teléfono.
 
+### Restablecer la clave del Vendedor (RF-USU-05, D-35)
+
+Si el Vendedor olvidó su clave, no hay endpoint HTTP: se restablece en el servidor.
+Defina la clave nueva **solo en esa terminal** (no la escriba en `.env`):
+
+```powershell
+$env:VENDEDOR_CLAVE_NUEVA = 'ClaveNueva2026'
+npm run restablecer-clave-vendedor
+Remove-Item Env:VENDEDOR_CLAVE_NUEVA
+```
+
+- La clave nueva sigue las mismas reglas (8 a 72 caracteres, letras y números, D-22).
+- Cambia la clave del único Vendedor, **cierra todas sus sesiones** y registra
+  `CLAVE_RESTABLECIDA` (`origen: COMANDO_SERVIDOR`) en la bitácora.
+- Si no existe un Vendedor, termina con error (código 1) y sugiere `npm run crear-vendedor`.
+- Solo muestra el id del Vendedor y cuántas sesiones cerró; nunca la clave ni su hash.
+
 Las migraciones usan `src/configuracion/fuente-datos.ts` (compilado en
 `dist/configuracion/fuente-datos.js`), que lee `.env`. `synchronize` está desactivado
 siempre: el esquema cambia **solo** con migraciones, y cada una implementa `down()`.
 
-Migraciones actuales: `CrearTablaUsuarios` (1.2) y `CrearTablaSesiones` (1.3).
+Migraciones actuales: `CrearTablaUsuarios` (1.2), `CrearTablaSesiones` (1.3),
+`CrearTablaAuditoria` (1.5), `AgregarAccionesRecuperacionAuditoria` y
+`CrearTablaCodigosRecuperacion` (RF-USU-05).
+
+## Recuperación y cambio de clave (RF-USU-05, D-35, D-39)
+
+Contrato completo en `docs/contrato-api/recuperacion-clave.md`.
+
+| Ruta | Acceso | Límite por IP (D-17) |
+|---|---|---|
+| `GET /api/v1/usuarios` | Vendedor; solo Clientes, paginado, `busqueda` sin mayúsculas ni tildes | — |
+| `POST /api/v1/usuarios/{id}/codigo-recuperacion` | Vendedor; 201 con el código (única vez que viaja) | — |
+| `POST /api/v1/autenticacion/recuperacion` | Público; correo + código + clave nueva → 204 | 5 por minuto |
+| `POST /api/v1/usuarios/yo/clave` | Autenticado (Cliente o Vendedor) → 204 | 5 por minuto |
+
+- Código de 6 dígitos (`randomInt` de `node:crypto`), 15 minutos, un solo uso y 5 intentos;
+  en `codigos_recuperacion` se guarda solo su HMAC-SHA256 con `RECUPERACION_SECRETO`.
+  Generar uno nuevo invalida el anterior (índice único parcial: uno pendiente por Cliente).
+- Cualquier fallo de recuperación responde el mismo 422 `CODIGO_INVALIDO`; el motivo solo
+  queda en la bitácora (`RECUPERACION_FALLIDA`).
+- Recuperar la clave cierra **todas** las sesiones del Cliente; cambiarla con sesión cierra
+  las demás y conserva la de `tokenRenovacionActual` (si se envía).
 
 ## Pruebas e2e (base `catalogostock_pruebas`, D-23)
 

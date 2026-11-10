@@ -23,6 +23,9 @@ export const VIDA_RENOVACION_DIAS = 7;
 /** Longitud mínima de JWT_SECRETO (contrato de usuarios). */
 export const LONGITUD_MINIMA_JWT_SECRETO = 32;
 
+/** Longitud mínima de RECUPERACION_SECRETO (contrato de recuperación de clave). */
+export const LONGITUD_MINIMA_RECUPERACION_SECRETO = 32;
+
 /**
  * Variables de entorno obligatorias de la API.
  * Cada variable está documentada en `.env.example` con valores falsos.
@@ -86,6 +89,17 @@ export class VariablesEntorno {
     message: `JWT_SECRETO debe tener al menos ${LONGITUD_MINIMA_JWT_SECRETO} caracteres`,
   })
   JWT_SECRETO!: string;
+
+  /**
+   * Secreto del HMAC-SHA256 con el que se guarda el hash de los códigos de
+   * recuperación (RF-USU-05, D-35). Obligatorio y de al menos 32 caracteres
+   * aleatorios. Si cambia, los códigos vigentes dejan de servir.
+   */
+  @IsString()
+  @MinLength(LONGITUD_MINIMA_RECUPERACION_SECRETO, {
+    message: `RECUPERACION_SECRETO debe tener al menos ${LONGITUD_MINIMA_RECUPERACION_SECRETO} caracteres`,
+  })
+  RECUPERACION_SECRETO!: string;
 
   /**
    * Vida del token de acceso en segundos (D-09: 15 minutos).

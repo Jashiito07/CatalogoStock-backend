@@ -12,6 +12,7 @@ const VARIABLES_VALIDAS = {
   BD_USUARIO: 'usuario_falso',
   BD_CLAVE: 'clave_falsa',
   JWT_SECRETO: 'secreto_falso_de_pruebas_con_32_caracteres_o_mas',
+  RECUPERACION_SECRETO: 'otro_secreto_falso_de_pruebas_de_32_caracteres',
 };
 
 describe('Configuración: validación de variables de entorno al arrancar', () => {
@@ -99,6 +100,26 @@ describe('Configuración: validación de variables de entorno al arrancar', () =
     }
     expect(mensaje).toContain('JWT_SECRETO');
     expect(mensaje).not.toContain('secreto-x');
+  });
+
+  it('RF-USU-05: RECUPERACION_SECRETO exige 32 caracteres y el error no muestra el secreto', () => {
+    let mensaje = '';
+    try {
+      validarVariablesEntorno({
+        ...VARIABLES_VALIDAS,
+        RECUPERACION_SECRETO: 'secreto-corto-31-caracteres-abc',
+      });
+    } catch (error) {
+      mensaje = (error as Error).message;
+    }
+    expect(mensaje).toContain('RECUPERACION_SECRETO');
+    expect(mensaje).not.toContain('secreto-corto');
+    expect(
+      validarVariablesEntorno({
+        ...VARIABLES_VALIDAS,
+        RECUPERACION_SECRETO: 'x'.repeat(32),
+      }).RECUPERACION_SECRETO,
+    ).toHaveLength(32);
   });
 
   it('el error no expone el valor de los secretos', () => {

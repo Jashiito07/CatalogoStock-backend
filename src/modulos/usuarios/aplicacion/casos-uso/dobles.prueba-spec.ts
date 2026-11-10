@@ -10,7 +10,13 @@ import type {
   RegistrarActividad,
   ServicioAuditoria,
 } from '../../../auditoria/index.js';
+import type { Paginacion } from '../../../../compartido/dominio/paginacion.js';
 import type { AvisoPrivacidad } from '../../dominio/aviso-privacidad.js';
+import {
+  type BusquedaClientes,
+  normalizarParaBusqueda,
+} from '../../dominio/busqueda-clientes.js';
+import { CodigoRecuperacion } from '../../dominio/codigo-recuperacion.js';
 import { Correo } from '../../dominio/correo.js';
 import {
   CorreoYaRegistradoError,
@@ -31,7 +37,12 @@ import type { FuenteAvisoPrivacidad } from '../puertos/fuente-aviso-privacidad.p
 import type { GeneradorHash } from '../puertos/generador-hash.puerto.js';
 import type { GeneradorTokenRenovacion } from '../puertos/generador-token-renovacion.puerto.js';
 import type { SesionRepositorio } from '../puertos/sesion.repositorio.js';
-import type { UsuarioRepositorio } from '../puertos/usuario.repositorio.js';
+import type {
+  PaginaUsuarios,
+  UsuarioRepositorio,
+} from '../puertos/usuario.repositorio.js';
+import type { CodigoRecuperacionRepositorio } from '../puertos/codigo-recuperacion.repositorio.js';
+import type { ProtectorCodigoRecuperacion } from '../puertos/protector-codigo-recuperacion.puerto.js';
 
 export const INICIO = new Date('2026-11-05T15:00:00.000Z');
 export const UN_DIA_MS = 24 * 60 * 60 * 1000;
@@ -86,8 +97,64 @@ export class UsuarioRepositorioEnMemoria implements UsuarioRepositorio {
     );
   }
 
+  buscarVendedor(): Promise<Usuario | null> {
+    return Promise.resolve(this.usuarios.find((u) => u.esVendedor()) ?? null);
+  }
+
   existeConRol(rol: Rol): Promise<boolean> {
     return Promise.resolve(this.usuarios.some((u) => u.rol === rol));
+  }
+
+  actualizarClave(
+    idUsuario: string,
+    hashClave: string,
+    ahora: Date,
+  ): Promise<void> {
+    const indice = this.usuarios.findIndex((u) => u.id === idUsuario);
+    if (indice >= 0) {
+      const u = this.usuarios[indice];
+      this.usuarios[indice] = Usuario.reconstituir({
+        id: u.id,
+        nombre: u.nombre,
+        correo: u.correo,
+        telefono: u.telefono,
+        hashClave,
+        rol: u.rol,
+        activo: u.activo,
+        privacidadAceptadaEn: u.privacidadAceptadaEn,
+        versionPrivacidad: u.versionPrivacidad,
+        creadoEn: u.creadoEn,
+        actualizadoEn: ahora,
+      });
+    }
+    return Promise.resolve();
+  }
+
+  /** Mismo filtro que el adaptador: solo Clientes, sin mayúsculas ni tildes. */
+  listarClientes(
+    busqueda: BusquedaClientes | null,
+    paginacion: Paginacion,
+  ): Promise<PaginaUsuarios> {
+    const coincide = (u: Usuario): boolean => {
+      if (busqueda === null) {
+        return true;
+      }
+      return (
+        normalizarParaBusqueda(u.nombre.valor).includes(busqueda.texto) ||
+        normalizarParaBusqueda(u.correo.valor).includes(busqueda.texto) ||
+        u.telefono.valor.includes(busqueda.texto) ||
+        (busqueda.telefonoInternacional !== null &&
+          u.telefono.valor.includes(busqueda.telefonoInternacional))
+      );
+    };
+    const clientes = this.usuarios
+      .filter((u) => u.esCliente() && coincide(u))
+      .toSorted((a, b) => b.creadoEn.getTime() - a.creadoEn.getTime());
+    const inicio = (paginacion.pagina - 1) * paginacion.tamanio;
+    return Promise.resolve({
+      usuarios: clientes.slice(inicio, inicio + paginacion.tamanio),
+      total: clientes.length,
+    });
   }
 
   crear(usuario: Usuario): Promise<void> {
@@ -150,6 +217,30 @@ export class SesionRepositorioEnMemoria implements SesionRepositorio {
           hashToken: sesion.hashToken,
           revocadaEn: ahora,
           motivoRevocacion: motivo,
+        });
+        revocadas++;
+      }
+    });
+    return Promise.resolve(revocadas);
+  }
+
+  revocarDeUsuario(
+    idUsuario: string,
+    ahora: Date,
+    familiaConservada?: string,
+  ): Promise<number> {
+    let revocadas = 0;
+    this.sesiones.forEach((sesion, indice) => {
+      if (
+        sesion.idUsuario === idUsuario &&
+        sesion.estadoEn(ahora) === 'VIGENTE' &&
+        sesion.familia !== familiaConservada
+      ) {
+        this.sesiones[indice] = Sesion.reconstituir({
+          ...sesion.toJSON(),
+          hashToken: sesion.hashToken,
+          revocadaEn: ahora,
+          motivoRevocacion: 'CERRADA',
         });
         revocadas++;
       }
@@ -274,6 +365,87 @@ export class AuditoriaFalsa implements ServicioAuditoria {
       enTransaccion: this.unidad?.activa ?? false,
       sinInterrumpir,
     });
+  }
+}
+
+/** Copia independiente del código (el repositorio no comparte objetos). */
+function copiarCodigo(codigo: CodigoRecuperacion): CodigoRecuperacion {
+  return CodigoRecuperacion.reconstituir({
+    ...codigo.toJSON(),
+    hashCodigo: codigo.hashCodigo,
+  });
+}
+
+/** Repositorio de códigos en memoria con la regla «uno pendiente por Cliente». */
+export class CodigoRecuperacionRepositorioEnMemoria implements CodigoRecuperacionRepositorio {
+  readonly codigos: CodigoRecuperacion[] = [];
+
+  reemplazarPendientes(nuevo: CodigoRecuperacion, ahora: Date): Promise<void> {
+    this.codigos.forEach((codigo, indice) => {
+      if (
+        codigo.idUsuario === nuevo.idUsuario &&
+        codigo.usadoEn === null &&
+        codigo.invalidadoEn === null
+      ) {
+        this.codigos[indice] = CodigoRecuperacion.reconstituir({
+          ...codigo.toJSON(),
+          hashCodigo: codigo.hashCodigo,
+          invalidadoEn: ahora,
+        });
+      }
+    });
+    this.codigos.push(copiarCodigo(nuevo));
+    return Promise.resolve();
+  }
+
+  buscarUltimoParaActualizar(
+    idUsuario: string,
+  ): Promise<CodigoRecuperacion | null> {
+    const delCliente = this.codigos.filter((c) => c.idUsuario === idUsuario);
+    const ultimo = delCliente.at(-1);
+    return Promise.resolve(ultimo ? copiarCodigo(ultimo) : null);
+  }
+
+  guardar(codigo: CodigoRecuperacion): Promise<void> {
+    const indice = this.codigos.findIndex((c) => c.id === codigo.id);
+    if (indice >= 0) {
+      this.codigos[indice] = copiarCodigo(codigo);
+    }
+    return Promise.resolve();
+  }
+
+  vencimientosVigentes(
+    idsUsuarios: readonly string[],
+    ahora: Date,
+  ): Promise<ReadonlyMap<string, Date>> {
+    const resultado = new Map<string, Date>();
+    for (const codigo of this.codigos) {
+      const hasta = codigo.vigenteHasta(ahora);
+      if (idsUsuarios.includes(codigo.idUsuario) && hasta !== null) {
+        resultado.set(codigo.idUsuario, hasta);
+      }
+    }
+    return Promise.resolve(resultado);
+  }
+}
+
+/** Códigos `100001`, `100002`…; hash `hmac(<código>)`. */
+export class ProtectorCodigoFalso implements ProtectorCodigoRecuperacion {
+  private siguiente = 100001;
+  readonly generados: string[] = [];
+
+  generar(): string {
+    const codigo = String(this.siguiente++);
+    this.generados.push(codigo);
+    return codigo;
+  }
+
+  calcularHash(codigo: string): string {
+    return `hmac(${codigo})`;
+  }
+
+  coincide(codigo: string, hash: string): boolean {
+    return this.calcularHash(codigo) === hash;
   }
 }
 
