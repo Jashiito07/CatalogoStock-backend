@@ -2,57 +2,23 @@ import type { GeneradorId } from '../../../../compartido/aplicacion/generador-id
 import type { Reloj } from '../../../../compartido/aplicacion/reloj.puerto.js';
 import { DatosInvalidosError } from '../../../../compartido/dominio/errores.js';
 import { Correo } from '../../dominio/correo.js';
-import {
-  CorreoYaRegistradoError,
-  VendedorYaExisteError,
-} from '../../dominio/errores-usuario.js';
+import { VendedorYaExisteError } from '../../dominio/errores-usuario.js';
 import { NombreUsuario } from '../../dominio/nombre-usuario.js';
-import type { Rol } from '../../dominio/rol.js';
 import { Telefono } from '../../dominio/telefono.js';
 import { Usuario } from '../../dominio/usuario.js';
 import { GeneradorHashBcrypt } from '../../infraestructura/seguridad/generador-hash.bcrypt.js';
 import type { GeneradorHash } from '../puertos/generador-hash.puerto.js';
-import type { UsuarioRepositorio } from '../puertos/usuario.repositorio.js';
 import {
   CrearVendedorCasoUso,
   type DatosCrearVendedor,
 } from './crear-vendedor.caso-uso.js';
-import { AuditoriaFalsa, UnidadDeTrabajoFalsa } from './dobles.prueba-spec.js';
-
-/** Repositorio en memoria con las mismas reglas de unicidad que la tabla. */
-class UsuarioRepositorioEnMemoria implements UsuarioRepositorio {
-  readonly usuarios: Usuario[] = [];
-
-  buscarPorId(id: string): Promise<Usuario | null> {
-    return Promise.resolve(this.usuarios.find((u) => u.id === id) ?? null);
-  }
-
-  buscarPorIds(ids: readonly string[]): Promise<Usuario[]> {
-    return Promise.resolve(this.usuarios.filter((u) => ids.includes(u.id)));
-  }
-
-  buscarPorCorreo(correo: Correo): Promise<Usuario | null> {
-    return Promise.resolve(
-      this.usuarios.find((u) => u.correo.esIgualA(correo)) ?? null,
-    );
-  }
-
-  existeConRol(rol: Rol): Promise<boolean> {
-    return Promise.resolve(this.usuarios.some((u) => u.rol === rol));
-  }
-
-  crear(usuario: Usuario): Promise<void> {
-    if (this.usuarios.some((u) => u.correo.esIgualA(usuario.correo))) {
-      return Promise.reject(new CorreoYaRegistradoError());
-    }
-    // D-21: igual que el índice uq_usuarios_un_vendedor.
-    if (usuario.esVendedor() && this.usuarios.some((u) => u.esVendedor())) {
-      return Promise.reject(new VendedorYaExisteError());
-    }
-    this.usuarios.push(usuario);
-    return Promise.resolve();
-  }
-}
+// Repositorio en memoria con las mismas reglas de unicidad que la tabla
+// (incluido D-21: un solo Vendedor, como `uq_usuarios_un_vendedor`).
+import {
+  AuditoriaFalsa,
+  UnidadDeTrabajoFalsa,
+  UsuarioRepositorioEnMemoria,
+} from './dobles.prueba-spec.js';
 
 /** Hash falso y rápido para las pruebas que no verifican bcrypt. */
 class GeneradorHashFalso implements GeneradorHash {

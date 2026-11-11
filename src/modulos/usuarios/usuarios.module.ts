@@ -20,7 +20,23 @@ import {
   SERVICIO_AUDITORIA,
   type ServicioAuditoria,
 } from '../auditoria/index.js';
+import { CambiarClaveCasoUso } from './aplicacion/casos-uso/cambiar-clave.caso-uso.js';
 import { CerrarSesionCasoUso } from './aplicacion/casos-uso/cerrar-sesion.caso-uso.js';
+import { GenerarCodigoRecuperacionCasoUso } from './aplicacion/casos-uso/generar-codigo-recuperacion.caso-uso.js';
+import { ListarClientesCasoUso } from './aplicacion/casos-uso/listar-clientes.caso-uso.js';
+import { RecuperarClaveCasoUso } from './aplicacion/casos-uso/recuperar-clave.caso-uso.js';
+import { RestablecerClaveVendedorCasoUso } from './aplicacion/casos-uso/restablecer-clave-vendedor.caso-uso.js';
+import {
+  CODIGO_RECUPERACION_REPOSITORIO,
+  type CodigoRecuperacionRepositorio,
+} from './aplicacion/puertos/codigo-recuperacion.repositorio.js';
+import {
+  PROTECTOR_CODIGO_RECUPERACION,
+  type ProtectorCodigoRecuperacion,
+} from './aplicacion/puertos/protector-codigo-recuperacion.puerto.js';
+import { CodigoRecuperacionOrmEntity } from './infraestructura/persistencia/codigo-recuperacion.orm-entity.js';
+import { CodigoRecuperacionRepositorioTypeorm } from './infraestructura/persistencia/codigo-recuperacion.repositorio.typeorm.js';
+import { ProtectorCodigoRecuperacionCrypto } from './infraestructura/seguridad/protector-codigo-recuperacion.crypto.js';
 import { ConsultarAvisoPrivacidadCasoUso } from './aplicacion/casos-uso/consultar-aviso-privacidad.caso-uso.js';
 import { ConsultarResumenesUsuariosCasoUso } from './aplicacion/casos-uso/consultar-resumenes-usuarios.caso-uso.js';
 import { ConsultarUsuarioActualCasoUso } from './aplicacion/casos-uso/consultar-usuario-actual.caso-uso.js';
@@ -85,10 +101,17 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
  * - 1.5: registra en la bitácora (`AuditoriaModule`) el registro, los
  *   ingresos, la salida, la reutilización de tokens y el Vendedor semilla; las
  *   escrituras de datos van con su registro en una sola transacción.
+ * - F1+ (RF-USU-05, D-35, D-39): lista de Clientes del panel, código de
+ *   recuperación generado por el Vendedor, recuperación con código, cambio
+ *   de clave con sesión y restablecimiento de la clave del Vendedor por comando.
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UsuarioOrmEntity, SesionOrmEntity]),
+    TypeOrmModule.forFeature([
+      UsuarioOrmEntity,
+      SesionOrmEntity,
+      CodigoRecuperacionOrmEntity,
+    ]),
     // 1.5: registrar actividades en la bitácora (RF-USU-04).
     AuditoriaModule,
     JwtModule.registerAsync({
@@ -316,13 +339,157 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
       useFactory: (usuarios: UsuarioRepositorio) =>
         new ConsultarResumenesUsuariosCasoUso(usuarios),
     },
+    // RF-USU-05: recuperación asistida y cambio de clave (D-35, D-39).
+    {
+      provide: CODIGO_RECUPERACION_REPOSITORIO,
+      useClass: CodigoRecuperacionRepositorioTypeorm,
+    },
+    {
+      provide: PROTECTOR_CODIGO_RECUPERACION,
+      inject: [ConfigService],
+      useFactory: (configuracion: Configuracion) =>
+        new ProtectorCodigoRecuperacionCrypto(
+          configuracion.get('RECUPERACION_SECRETO', { infer: true }),
+        ),
+    },
+    {
+      provide: ListarClientesCasoUso,
+      inject: [USUARIO_REPOSITORIO, CODIGO_RECUPERACION_REPOSITORIO, RELOJ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        codigos: CodigoRecuperacionRepositorio,
+        reloj: Reloj,
+      ) => new ListarClientesCasoUso(usuarios, codigos, reloj),
+    },
+    {
+      provide: GenerarCodigoRecuperacionCasoUso,
+      inject: [
+        USUARIO_REPOSITORIO,
+        CODIGO_RECUPERACION_REPOSITORIO,
+        PROTECTOR_CODIGO_RECUPERACION,
+        GENERADOR_ID,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        codigos: CodigoRecuperacionRepositorio,
+        protector: ProtectorCodigoRecuperacion,
+        generadorId: GeneradorId,
+        reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
+      ) =>
+        new GenerarCodigoRecuperacionCasoUso(
+          usuarios,
+          codigos,
+          protector,
+          generadorId,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
+    },
+    {
+      provide: RecuperarClaveCasoUso,
+      inject: [
+        USUARIO_REPOSITORIO,
+        SESION_REPOSITORIO,
+        CODIGO_RECUPERACION_REPOSITORIO,
+        PROTECTOR_CODIGO_RECUPERACION,
+        GENERADOR_HASH,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        sesiones: SesionRepositorio,
+        codigos: CodigoRecuperacionRepositorio,
+        protector: ProtectorCodigoRecuperacion,
+        generadorHash: GeneradorHash,
+        reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
+      ) =>
+        new RecuperarClaveCasoUso(
+          usuarios,
+          sesiones,
+          codigos,
+          protector,
+          generadorHash,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
+    },
+    {
+      provide: CambiarClaveCasoUso,
+      inject: [
+        USUARIO_REPOSITORIO,
+        SESION_REPOSITORIO,
+        GENERADOR_HASH,
+        GENERADOR_TOKEN_RENOVACION,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        sesiones: SesionRepositorio,
+        generadorHash: GeneradorHash,
+        generadorToken: GeneradorTokenRenovacion,
+        reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
+      ) =>
+        new CambiarClaveCasoUso(
+          usuarios,
+          sesiones,
+          generadorHash,
+          generadorToken,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
+    },
+    {
+      provide: RestablecerClaveVendedorCasoUso,
+      inject: [
+        USUARIO_REPOSITORIO,
+        SESION_REPOSITORIO,
+        GENERADOR_HASH,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        sesiones: SesionRepositorio,
+        generadorHash: GeneradorHash,
+        reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
+      ) =>
+        new RestablecerClaveVendedorCasoUso(
+          usuarios,
+          sesiones,
+          generadorHash,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
+    },
   ],
   // EMISOR_TOKEN_ACCESO se exporta para el guard global de autenticación,
   // que se registra en `ProteccionRutasModule` (subfase 1.4).
   // ConsultarResumenesUsuariosCasoUso es el servicio público con el que la
   // bitácora muestra `{ id, nombre, rol }` (subfase 1.5).
+  // RestablecerClaveVendedorCasoUso: para `npm run restablecer-clave-vendedor`.
   exports: [
     CrearVendedorCasoUso,
+    RestablecerClaveVendedorCasoUso,
     EMISOR_TOKEN_ACCESO,
     ConsultarResumenesUsuariosCasoUso,
   ],

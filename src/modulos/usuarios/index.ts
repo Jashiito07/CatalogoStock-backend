@@ -6,6 +6,10 @@ export {
   type ResultadoCrearVendedor,
 } from './aplicacion/casos-uso/crear-vendedor.caso-uso.js';
 export {
+  RestablecerClaveVendedorCasoUso,
+  type ResultadoRestablecerClaveVendedor,
+} from './aplicacion/casos-uso/restablecer-clave-vendedor.caso-uso.js';
+export {
   ConsultarResumenesUsuariosCasoUso,
   type ResumenUsuario,
 } from './aplicacion/casos-uso/consultar-resumenes-usuarios.caso-uso.js';

@@ -18,6 +18,16 @@ export interface SesionRepositorio {
     motivo: Exclude<MotivoRevocacion, 'ROTADA'>,
     ahora: Date,
   ): Promise<number>;
+  /**
+   * Revoca como `CERRADA` todas las sesiones aún vigentes del usuario (todas
+   * sus familias), salvo las de `familiaConservada` si se indica (RF-USU-05:
+   * el cambio de clave conserva la sesión actual). Devuelve cuántas revocó.
+   */
+  revocarDeUsuario(
+    idUsuario: string,
+    ahora: Date,
+    familiaConservada?: string,
+  ): Promise<number>;
 }
 
 export const SESION_REPOSITORIO = Symbol('SESION_REPOSITORIO');

@@ -7,7 +7,8 @@ import type { AccionAuditoria } from './catalogo-auditoria.js';
  * Nunca se guardan claves (ni la intentada), hashes, tokens, teléfonos, datos
  * bancarios, comprobantes ni el cuerpo de la solicitud. Solo identificadores,
  * códigos y estados. **Única excepción con dato personal (D-20):** el correo
- * intentado de `SESION_FALLIDA`, en minúsculas y recortado a 254 caracteres.
+ * intentado de `SESION_FALLIDA` y de `RECUPERACION_FALLIDA` (RF-USU-05), en
+ * minúsculas y recortado a 254 caracteres.
  *
  * La salvaguarda **elimina** (no rechaza) lo prohibido: un descuido de quien
  * llama nunca guarda un dato sensible ni impide la operación de negocio; los
@@ -150,9 +151,18 @@ export function normalizarCorreoIntentado(correo: string): string {
   return correo.trim().toLowerCase().slice(0, LONGITUD_MAXIMA_CORREO);
 }
 
-/** D-20: la única excepción es `correo` en `SESION_FALLIDA`. */
+/**
+ * D-20: la única excepción es el `correo` intentado de un acceso fallido:
+ * `SESION_FALLIDA` y, con RF-USU-05, `RECUPERACION_FALLIDA` (contrato de
+ * auditoría).
+ */
+const ACCIONES_CON_CORREO_INTENTADO: ReadonlySet<AccionAuditoria> = new Set([
+  'SESION_FALLIDA',
+  'RECUPERACION_FALLIDA',
+]);
+
 function esCorreoIntentado(accion: AccionAuditoria, nombre: string): boolean {
-  return accion === 'SESION_FALLIDA' && nombre === 'correo';
+  return ACCIONES_CON_CORREO_INTENTADO.has(accion) && nombre === 'correo';
 }
 
 /** Nombre que se puede mostrar en el log técnico (nunca un valor). */

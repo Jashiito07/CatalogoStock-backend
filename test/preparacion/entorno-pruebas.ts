@@ -28,6 +28,7 @@ const VALORES_FIJOS: Readonly<Record<string, string>> = {
   // Costo mínimo permitido: las pruebas hacen muchos hash.
   BCRYPT_COSTO: '10',
   JWT_SECRETO: 'secreto_falso_solo_para_pruebas_e2e_0123456789',
+  RECUPERACION_SECRETO: 'secreto_falso_de_recuperacion_solo_e2e_0123456789',
   JWT_VIDA_ACCESO_SEGUNDOS: '900',
   RENOVACION_VIDA_DIAS: '7',
   PROXY_SALTOS_CONFIABLES: '0',
