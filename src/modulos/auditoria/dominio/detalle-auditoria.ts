@@ -15,7 +15,10 @@ import type { AccionAuditoria } from './catalogo-auditoria.js';
  * nombres de los campos descartados se devuelven para avisar en el log
  * técnico (nunca sus valores).
  */
-export type ValorDetalle = string | number | boolean | null;
+export type ValorDetalle = string | number | boolean | null | readonly string[];
+
+/** Valor que aceptan quienes registran: igual que `ValorDetalle` (listas de textos incluidas, p. ej. `campos`). */
+export type ValorDetalleEntrada = ValorDetalle;
 
 export type DetalleAuditoria = Readonly<Record<string, ValorDetalle>>;
 
@@ -125,16 +128,35 @@ function nombreProhibido(nombre: string): boolean {
   );
 }
 
+function esListaTextos(valor: unknown): valor is readonly string[] {
+  return (
+    Array.isArray(valor) &&
+    valor.every((elemento) => typeof elemento === 'string')
+  );
+}
+
 function esValorDetalle(valor: unknown): valor is ValorDetalle {
   return (
     valor === null ||
     typeof valor === 'string' ||
     typeof valor === 'boolean' ||
-    (typeof valor === 'number' && Number.isFinite(valor))
+    (typeof valor === 'number' && Number.isFinite(valor)) ||
+    esListaTextos(valor)
   );
 }
 
+/**
+ * Excepción del contrato de productos: el `nombre` de la marca creada no es
+ * un dato personal (`MARCA_CREADA` → `{ "nombre": "Yanbal" }`).
+ */
+function esNombreDeMarca(accion: AccionAuditoria, nombre: string): boolean {
+  return accion === 'MARCA_CREADA' && nombre === 'nombre';
+}
+
 function valorProhibido(valor: ValorDetalle): boolean {
+  if (Array.isArray(valor)) {
+    return valor.some((elemento) => valorProhibido(elemento as string));
+  }
   if (typeof valor === 'number') {
     // Un número de tarjeta o de cuenta enviado como número.
     return /\d{10,}/.test(Math.abs(valor).toFixed(0));
@@ -144,6 +166,21 @@ function valorProhibido(valor: ValorDetalle): boolean {
   }
   const sinUuid = valor.replace(UUID, '-');
   return PATRONES_VALOR_PROHIBIDO.some((patron) => patron.test(sinUuid));
+}
+
+/** Recorta textos y listas (como máximo `CAMPOS_MAXIMOS` elementos). */
+function recortar(valor: ValorDetalle): ValorDetalle {
+  if (typeof valor === 'string') {
+    return valor.slice(0, LONGITUD_MAXIMA_TEXTO);
+  }
+  if (Array.isArray(valor)) {
+    return Object.freeze(
+      (valor as readonly string[])
+        .slice(0, CAMPOS_MAXIMOS)
+        .map((elemento) => elemento.slice(0, LONGITUD_MAXIMA_TEXTO)),
+    );
+  }
+  return valor;
 }
 
 /** D-20: correo intentado sin espacios alrededor, en minúsculas y con 254 caracteres como máximo. */
@@ -194,17 +231,14 @@ export function sanearDetalle(
       continue;
     }
     if (
-      nombreProhibido(nombre) ||
+      (nombreProhibido(nombre) && !esNombreDeMarca(accion, nombre)) ||
       !esValorDetalle(valor) ||
       valorProhibido(valor)
     ) {
       descartados.push(nombreParaAviso(nombre));
       continue;
     }
-    aceptados.push([
-      nombre,
-      typeof valor === 'string' ? valor.slice(0, LONGITUD_MAXIMA_TEXTO) : valor,
-    ]);
+    aceptados.push([nombre, recortar(valor)]);
   }
 
   const sobrantes = aceptados.splice(CAMPOS_MAXIMOS);

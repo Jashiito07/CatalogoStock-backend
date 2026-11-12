@@ -2,6 +2,7 @@ import type {
   AccionAuditoria,
   EntidadAuditoria,
 } from '../dominio/catalogo-auditoria.js';
+import type { ValorDetalleEntrada } from '../dominio/detalle-auditoria.js';
 
 /**
  * API interna de la bitácora para los demás módulos del backend (contrato de
@@ -16,7 +17,7 @@ export interface RegistrarActividad {
   entidad: EntidadAuditoria | null;
   idEntidad: string | null;
   /** Sin datos sensibles: la salvaguarda del dominio elimina lo prohibido. */
-  detalle?: Record<string, string | number | boolean | null>;
+  detalle?: Record<string, ValorDetalleEntrada>;
 }
 
 export interface ServicioAuditoria {

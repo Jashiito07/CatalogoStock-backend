@@ -171,6 +171,22 @@ describe('Catálogo de la bitácora (contrato de auditoría)', () => {
     expect(esAccionAuditoria('sesion_cerrada')).toBe(false);
     expect(esAccionAuditoria(1)).toBe(false);
     expect(esEntidadAuditoria('PEDIDO')).toBe(true);
-    expect(esEntidadAuditoria('PRODUCTO')).toBe(false);
+    expect(esEntidadAuditoria('PRODUCTO')).toBe(true);
+    expect(esEntidadAuditoria('MARCA')).toBe(true);
+    expect(esEntidadAuditoria('LIBRO')).toBe(false);
+  });
+
+  it('F2: las acciones de marcas, productos e imágenes tienen su entidad', () => {
+    expect(ENTIDAD_DE_LA_ACCION.MARCA_CREADA).toBe('MARCA');
+    expect(ENTIDAD_DE_LA_ACCION.MARCA_ACTUALIZADA).toBe('MARCA');
+    for (const accion of [
+      'PRODUCTO_CREADO',
+      'PRODUCTO_ACTUALIZADO',
+      'PRODUCTO_ELIMINADO',
+      'IMAGEN_AGREGADA',
+      'IMAGEN_ELIMINADA',
+    ] as const) {
+      expect(ENTIDAD_DE_LA_ACCION[accion]).toBe('PRODUCTO');
+    }
   });
 });
