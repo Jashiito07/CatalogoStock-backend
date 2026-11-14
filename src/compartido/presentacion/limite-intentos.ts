@@ -29,6 +29,9 @@ export const GRUPOS_LIMITE_INTENTOS = {
   // RF-USU-05 (contrato de recuperación de clave): 5 por minuto cada una.
   RECUPERACION: { limite: 5, ventanaMs: 60_000 },
   CAMBIO_CLAVE: { limite: 5, ventanaMs: 60_000 },
+  // RF-PRO-01 (contrato de productos, imágenes): 30 subidas por minuto. Se
+  // cuenta por IP, como los demás grupos (el guard corre antes de la sesión).
+  SUBIDA_IMAGENES: { limite: 30, ventanaMs: 60_000 },
 } as const;
 
 export type GrupoLimiteIntentos = keyof typeof GRUPOS_LIMITE_INTENTOS;

@@ -1,12 +1,27 @@
 import type { Pagina } from '../../../../compartido/dominio/paginacion.js';
+import { PREFIJO_API } from '../../../../configuracion/aplicacion-http.js';
 import type { VistaProducto } from '../../aplicacion/vista-producto.js';
+import type { ImagenPublica } from '../../dominio/imagen.js';
 
-/** Imagen del contrato; la subfase 2.4 las llena (`imagenes: []` por ahora). */
+/** Imagen del contrato de productos (RF-PRO-01, D-46). */
 export interface RespuestaImagen {
   id: string;
+  /** Ruta pública `/api/v1/imagenes/<uuid>.<ext>`. */
   url: string;
   orden: number;
   principal: boolean;
+}
+
+/** Ruta pública de las imágenes (sin el servidor ni rutas de disco). */
+export const RUTA_PUBLICA_IMAGENES = `/${PREFIJO_API}/imagenes`;
+
+export function aRespuestaImagen(imagen: ImagenPublica): RespuestaImagen {
+  return {
+    id: imagen.id,
+    url: `${RUTA_PUBLICA_IMAGENES}/${imagen.nombreArchivo}`,
+    orden: imagen.orden,
+    principal: imagen.principal,
+  };
 }
 
 /** Resumen de marca dentro de un Producto (contrato, «Modelo → Producto»). */
@@ -66,9 +81,20 @@ export function aRespuestaProducto(
 
 export function aRespuestaListaProductos(
   pagina: Pagina<VistaProducto>,
+  imagenesPorProducto: ReadonlyMap<
+    string,
+    readonly ImagenPublica[]
+  > = new Map(),
 ): RespuestaListaProductos {
   return {
-    elementos: pagina.elementos.map((vista) => aRespuestaProducto(vista)),
+    elementos: pagina.elementos.map((vista) =>
+      aRespuestaProducto(
+        vista,
+        (imagenesPorProducto.get(vista.producto.id) ?? []).map(
+          aRespuestaImagen,
+        ),
+      ),
+    ),
     pagina: pagina.pagina,
     tamanio: pagina.tamanio,
     total: pagina.total,

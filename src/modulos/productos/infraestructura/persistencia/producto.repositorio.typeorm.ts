@@ -38,6 +38,14 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
     return fila ? ProductoMapeador.aDominio(fila) : null;
   }
 
+  async bloquearPorId(id: string): Promise<Producto | null> {
+    const fila = await this.filas.findOne({
+      where: { id, eliminadoEn: IsNull() },
+      lock: { mode: 'pessimistic_write' },
+    });
+    return fila ? ProductoMapeador.aDominio(fila) : null;
+  }
+
   async listar(
     filtro: FiltroProductos,
     paginacion: Paginacion,

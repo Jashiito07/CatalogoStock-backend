@@ -9,7 +9,9 @@ export type CategoriaErrorDominio =
   | 'NO_AUTORIZADO'
   | 'NO_ENCONTRADO'
   | 'CONFLICTO'
-  | 'REGLA_NEGOCIO';
+  | 'REGLA_NEGOCIO'
+  | 'CONTENIDO_DEMASIADO_GRANDE'
+  | 'CONTENIDO_NO_ADMITIDO';
 
 export type DetallesError = Record<string, unknown>;
 
@@ -79,4 +81,14 @@ export class ConflictoError extends ErrorDominio {
 /** Una regla de negocio impide la operación, p. ej. `TRANSICION_NO_PERMITIDA` (HTTP 422). */
 export class ReglaNegocioError extends ErrorDominio {
   readonly categoria = 'REGLA_NEGOCIO';
+}
+
+/** Un archivo supera el tamaño permitido (HTTP 413, p. ej. `ARCHIVO_DEMASIADO_GRANDE`). */
+export class ContenidoDemasiadoGrandeError extends ErrorDominio {
+  readonly categoria = 'CONTENIDO_DEMASIADO_GRANDE';
+}
+
+/** El contenido real de un archivo no es de un tipo admitido (HTTP 415, p. ej. `TIPO_NO_ADMITIDO`). */
+export class ContenidoNoAdmitidoError extends ErrorDominio {
+  readonly categoria = 'CONTENIDO_NO_ADMITIDO';
 }

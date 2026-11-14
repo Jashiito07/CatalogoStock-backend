@@ -1,6 +1,7 @@
-import { IsUUID, ValidateIf } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsUUID, ValidateIf } from 'class-validator';
 import { CumpleReglaDominio } from '../../../../../compartido/presentacion/regla-dominio.js';
 import { PaginacionDto } from '../../../../../compartido/presentacion/paginacion.dto.js';
+import { MAXIMO_IMAGENES_POR_PRODUCTO } from '../../../dominio/imagen.js';
 import {
   MENSAJE_BUSQUEDA_INVALIDA,
   validarBusqueda,
@@ -85,4 +86,20 @@ export class ConsultaProductosDto extends PaginacionDto {
   @ValidateIf(presente)
   @CumpleReglaDominio(validarDisponibilidad, MENSAJE_DISPONIBILIDAD_INVALIDA)
   disponibilidad?: string;
+}
+
+/**
+ * Cuerpo de `PUT /api/v1/productos/{id}/imagenes/orden`: los ids de **todas**
+ * las imágenes del producto en el nuevo orden (como máximo 5).
+ */
+export class ReordenarImagenesDto {
+  @IsArray({ message: 'ids debe ser una lista de identificadores.' })
+  @ArrayMaxSize(MAXIMO_IMAGENES_POR_PRODUCTO, {
+    message: 'Un producto admite como máximo 5 imágenes.',
+  })
+  @IsUUID(undefined, {
+    each: true,
+    message: 'Cada imagen debe indicarse con su identificador (UUID).',
+  })
+  ids: string[];
 }

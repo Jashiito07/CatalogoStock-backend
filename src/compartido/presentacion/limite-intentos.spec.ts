@@ -44,10 +44,15 @@ describe('D-17: límite de intentos por IP', () => {
       RENOVACION: { limite: 10, ventanaMs: 60_000 },
       RECUPERACION: { limite: 5, ventanaMs: 60_000 },
       CAMBIO_CLAVE: { limite: 5, ventanaMs: 60_000 },
+      SUBIDA_IMAGENES: { limite: 30, ventanaMs: 60_000 },
     });
     expect(limitador('INGRESO')).toMatchObject({ limit: 5, ttl: 60_000 });
     expect(limitador('RECUPERACION')).toMatchObject({ limit: 5, ttl: 60_000 });
     expect(limitador('CAMBIO_CLAVE')).toMatchObject({ limit: 5, ttl: 60_000 });
+    expect(limitador('SUBIDA_IMAGENES')).toMatchObject({
+      limit: 30,
+      ttl: 60_000,
+    });
   });
 
   it('cada limitador solo cuenta las rutas de su grupo; las rutas sin grupo no tienen límite', () => {
