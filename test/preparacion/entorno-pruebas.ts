@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 
 /**
@@ -32,6 +33,9 @@ const VALORES_FIJOS: Readonly<Record<string, string>> = {
   JWT_VIDA_ACCESO_SEGUNDOS: '900',
   RENOVACION_VIDA_DIAS: '7',
   PROXY_SALTOS_CONFIABLES: '0',
+  // Carpeta TEMPORAL del sistema: las pruebas nunca escriben en la carpeta de
+  // desarrollo (`./almacenamiento`). Cada suite que sube archivos la borra al terminar.
+  RUTA_ALMACENAMIENTO: join(tmpdir(), 'catalogostock-e2e-almacenamiento'),
 };
 
 /**

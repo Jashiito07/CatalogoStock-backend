@@ -94,6 +94,10 @@ export class ProductoRepositorioEnMemoria implements ProductoRepositorio {
     );
   }
 
+  bloquearPorId(id: string): Promise<Producto | null> {
+    return this.buscarPorId(id);
+  }
+
   listar(
     filtro: FiltroProductos,
     paginacion: Paginacion,

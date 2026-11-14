@@ -20,6 +20,9 @@ export const VIDA_ACCESO_SEGUNDOS = 900;
 /** Vida del token de renovación por defecto: 7 días (D-09). */
 export const VIDA_RENOVACION_DIAS = 7;
 
+/** Carpeta de archivos por defecto (D-46), fuera de Git. */
+export const RUTA_ALMACENAMIENTO_POR_DEFECTO = './almacenamiento';
+
 /** Longitud mínima de JWT_SECRETO (contrato de usuarios). */
 export const LONGITUD_MINIMA_JWT_SECRETO = 32;
 
@@ -135,6 +138,16 @@ export class VariablesEntorno {
   @Min(0)
   @Max(5)
   PROXY_SALTOS_CONFIABLES: number = 0;
+
+  /**
+   * Carpeta del servidor donde se guardan los archivos (imágenes de productos
+   * en <ruta>/productos/, D-46). Opcional: por defecto ./almacenamiento
+   * (fuera de Git). Debe ser una carpeta que solo la API pueda escribir.
+   */
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({ message: 'RUTA_ALMACENAMIENTO no puede estar vacía' })
+  RUTA_ALMACENAMIENTO: string = RUTA_ALMACENAMIENTO_POR_DEFECTO;
 }
 
 /**

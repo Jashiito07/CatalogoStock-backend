@@ -21,6 +21,13 @@ export interface ProductoRepositorio {
   /** El producto no eliminado o `null`. */
   buscarPorId(id: string): Promise<Producto | null>;
 
+  /**
+   * Como `buscarPorId`, pero bloquea la fila hasta el fin de la transacción en
+   * curso (`SELECT … FOR UPDATE`): serializa las altas de imágenes del mismo
+   * producto para que nunca superen el límite (D-46).
+   */
+  bloquearPorId(id: string): Promise<Producto | null>;
+
   /** Ordenados por nombre (sin tildes ni mayúsculas) y luego por id. */
   listar(
     filtro: FiltroProductos,

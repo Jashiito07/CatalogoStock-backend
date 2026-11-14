@@ -75,6 +75,24 @@ describe('Configuración: validación de variables de entorno al arrancar', () =
     expect(variables.PROXY_SALTOS_CONFIABLES).toBe(0);
   });
 
+  it('D-46: RUTA_ALMACENAMIENTO es opcional (por defecto ./almacenamiento), se puede cambiar y no admite vacío', () => {
+    expect(
+      validarVariablesEntorno({ ...VARIABLES_VALIDAS }).RUTA_ALMACENAMIENTO,
+    ).toBe('./almacenamiento');
+    expect(
+      validarVariablesEntorno({
+        ...VARIABLES_VALIDAS,
+        RUTA_ALMACENAMIENTO: '/var/lib/catalogostock',
+      }).RUTA_ALMACENAMIENTO,
+    ).toBe('/var/lib/catalogostock');
+    expect(() =>
+      validarVariablesEntorno({
+        ...VARIABLES_VALIDAS,
+        RUTA_ALMACENAMIENTO: '',
+      }),
+    ).toThrow('RUTA_ALMACENAMIENTO');
+  });
+
   it.each([
     ['JWT_SECRETO', 'corto'],
     ['JWT_VIDA_ACCESO_SEGUNDOS', '30'],

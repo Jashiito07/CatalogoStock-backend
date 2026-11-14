@@ -56,6 +56,7 @@ inválida, la API no inicia y el error solo nombra la variable, nunca su valor.
 | `RENOVACION_VIDA_DIAS` | Opcional. Vida del token de renovación (1 a 30; por defecto 7, D-09) | `7` |
 | `RECUPERACION_SECRETO` | Secreto del HMAC-SHA256 de los códigos de recuperación (RF-USU-05). Mínimo 32 caracteres aleatorios, distinto de `JWT_SECRETO` | ver `.env.example` |
 | `PROXY_SALTOS_CONFIABLES` | Opcional. Proxies de confianza delante de la API (`trust proxy`; 0 a 5, por defecto 0). En producción detrás de un proxy TLS: `1` (D-17) | `0` |
+| `RUTA_ALMACENAMIENTO` | Opcional. Carpeta de archivos del servidor; las imágenes de productos van en `<ruta>/productos/` (D-46). Por defecto `./almacenamiento` (fuera de Git). Las pruebas e2e usan una carpeta temporal | `./almacenamiento` |
 | `VENDEDOR_NOMBRE`, `VENDEDOR_CORREO`, `VENDEDOR_TELEFONO`, `VENDEDOR_CLAVE` | Solo para `npm run crear-vendedor`; la API no las usa | ver `.env.example` |
 | `VENDEDOR_CLAVE_NUEVA` | Solo para `npm run restablecer-clave-vendedor`; se define en la terminal, nunca en `.env` | — |
 
@@ -122,7 +123,8 @@ siempre: el esquema cambia **solo** con migraciones, y cada una implementa `down
 Migraciones actuales: `CrearTablaUsuarios` (1.2), `CrearTablaSesiones` (1.3),
 `CrearTablaAuditoria` (1.5), `AgregarAccionesRecuperacionAuditoria` y
 `CrearTablaCodigosRecuperacion` (RF-USU-05), `CrearTablaMarcas` y
-`AgregarAccionesCatalogoAuditoria` (2.2: acciones y entidades de marcas, productos e imágenes) y\n`CrearTablaProductos` (2.3).
+`AgregarAccionesCatalogoAuditoria` (2.2: acciones y entidades de marcas, productos e imágenes),
+`CrearTablaProductos` (2.3) y `CrearTablaImagenesProducto` (2.4).
 
 ## Marcas (RF-PRO-04, RF-PRO-06, RF-CAT-05, D-43, D-48)
 
@@ -160,8 +162,32 @@ Contrato completo en `docs/contrato-api/productos.md` («Endpoints: productos»)
 - Eliminación lógica (PA-07): `eliminado_en` con fecha; la fila se conserva. Al Cliente solo se le
   muestran productos de marcas activas.
 - Bitácora en la misma transacción: `PRODUCTO_CREADO`, `PRODUCTO_ACTUALIZADO`, `PRODUCTO_ELIMINADO`.
-  Otros módulos (imágenes en 2.4) usan `ProductosServicio` (`modulos/productos/index.ts`); `productos` usa
-  `MarcasServicio` y nunca lee la tabla `marcas`. La respuesta incluye `imagenes: []` hasta la 2.4.
+  Otros módulos usan `ProductosServicio` (`modulos/productos/index.ts`); `productos` usa
+  `MarcasServicio` y nunca lee la tabla `marcas`. Cada producto trae sus `imagenes` (ver abajo).
+
+### Imágenes de productos (RF-PRO-01, D-46)
+
+Contrato en `docs/contrato-api/productos.md` («Endpoints: imágenes»).
+
+| Ruta | Acceso |
+|---|---|
+| `POST /api/v1/productos/{id}/imagenes` | Vendedor; `multipart/form-data` con el campo `archivo`; 201 con la **Imagen**. 400 sin archivo, 404 producto, 413 más de 2 MB, 415 no es JPG/PNG/WebP, 422 `LIMITE_IMAGENES` (5). 30 subidas por minuto por IP |
+| `PUT /api/v1/productos/{id}/imagenes/orden` | Vendedor; cuerpo `{ "ids": [...] }` con **todas** las imágenes en el nuevo orden (la primera es la principal); 200 con la lista, 400 si faltan, sobran o se repiten ids |
+| `DELETE /api/v1/productos/{id}/imagenes/{imagenId}` | Vendedor; 204, borra la fila y el archivo y reasigna la principal; 404 |
+| `GET /api/v1/imagenes/{archivo}` | **Público** (D-46); solo `<uuid>.(jpg\|png\|webp)`, con `Cache-Control` inmutable y `nosniff`; cualquier otro nombre responde 404 |
+
+- Límites: máximo 5 imágenes por producto, 2 MB cada una, JPG, PNG o WebP. El tipo se decide por los
+  **primeros bytes** del archivo (no por la extensión ni el `Content-Type` del cliente) y el nombre en
+  disco es un UUID generado por el servidor (nunca el original).
+- **Carpeta de archivos**: variable `RUTA_ALMACENAMIENTO` (por defecto `./almacenamiento`, en `.gitignore`).
+  Las imágenes van en `<RUTA_ALMACENAMIENTO>/productos/<uuid>.<ext>`. En producción apúntela a una carpeta
+  fuera del código, escribible solo por la API e incluida en las copias de seguridad.
+- Tabla `imagenes_producto` (migración `CrearTablaImagenesProducto`): `orden` (0 = principal), `ruta_relativa`
+  única, `tipo`, `tamanio_bytes`. La eliminación lógica del producto **no** borra sus imágenes; eliminar una
+  imagen borra la fila y, tras confirmar la transacción, el archivo.
+- Las altas bloquean la fila del producto (`FOR UPDATE`): dos subidas simultáneas nunca superan las 5.
+- Bitácora en la misma transacción: `IMAGEN_AGREGADA` e `IMAGEN_ELIMINADA` (solo `idImagen`, sin rutas).
+
 ## Recuperación y cambio de clave (RF-USU-05, D-35, D-39)
 
 Contrato completo en `docs/contrato-api/recuperacion-clave.md`.
@@ -285,10 +311,10 @@ src/
       marcas.module.ts
       index.ts                    API pública del módulo
     productos/
-      dominio/                    Producto (precio con Dinero), Disponibilidad, búsqueda sin tildes
-      aplicacion/                 Casos de uso Listar/Obtener/Crear/Actualizar/Eliminar, ProductosServicio y puertos
-      infraestructura/            Tabla productos (TypeORM) y adaptador de MarcasServicio
-      presentacion/http/          ProductosController y DTOs
+      dominio/                    Producto (precio con Dinero), Disponibilidad, búsqueda sin tildes, Imagen (firma de bytes, límites)
+      aplicacion/                 Casos de uso de productos e imágenes, ProductosServicio y puertos
+      infraestructura/            Tablas productos e imagenes_producto (TypeORM), almacén en disco y adaptador de MarcasServicio
+      presentacion/http/          ProductosController, ImagenesController (público) y DTOs
       productos.module.ts
       index.ts                    API pública del módulo
     salud/

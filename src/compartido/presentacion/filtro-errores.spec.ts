@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import {
   ConflictoError,
+  ContenidoDemasiadoGrandeError,
+  ContenidoNoAdmitidoError,
   DatosInvalidosError,
   NoAutenticadoError,
   NoAutorizadoError,
@@ -27,6 +29,19 @@ describe('FiltroErrores: formato { codigo, mensaje, detalles } del contrato', ()
         'DATOS_INVALIDOS',
       ],
       [new NoEncontradoError('Pedido no encontrado'), 404, 'NO_ENCONTRADO'],
+      [
+        new ContenidoDemasiadoGrandeError(
+          'ARCHIVO_DEMASIADO_GRANDE',
+          'Pesa mucho',
+        ),
+        413,
+        'ARCHIVO_DEMASIADO_GRANDE',
+      ],
+      [
+        new ContenidoNoAdmitidoError('TIPO_NO_ADMITIDO', 'Tipo no admitido'),
+        415,
+        'TIPO_NO_ADMITIDO',
+      ],
       [new NoAutorizadoError(), 403, 'NO_AUTORIZADO'],
       [
         new NoAutenticadoError(

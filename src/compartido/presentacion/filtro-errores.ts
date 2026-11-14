@@ -26,6 +26,8 @@ const ESTADO_POR_CATEGORIA: Readonly<Record<CategoriaErrorDominio, number>> = {
   NO_ENCONTRADO: HttpStatus.NOT_FOUND,
   CONFLICTO: HttpStatus.CONFLICT,
   REGLA_NEGOCIO: HttpStatus.UNPROCESSABLE_ENTITY,
+  CONTENIDO_DEMASIADO_GRANDE: HttpStatus.PAYLOAD_TOO_LARGE,
+  CONTENIDO_NO_ADMITIDO: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
 };
 
 interface Resultado {
