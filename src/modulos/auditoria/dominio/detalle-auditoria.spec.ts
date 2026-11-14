@@ -107,7 +107,7 @@ describe('Seguridad / D-20: salvaguarda del detalle de la bitácora', () => {
   it('elimina valores que no son simples: objetos, listas, indefinidos, infinitos o funciones', () => {
     const resultado = sanearDetalle('ACCESO_DENEGADO', {
       anidado: { clave: 'x' },
-      lista: ['a'],
+      lista: [1, 2],
       indefinido: undefined,
       infinito: Number.POSITIVE_INFINITY,
       noNumero: Number.NaN,
@@ -230,5 +230,58 @@ describe('Seguridad / D-20: salvaguarda del detalle de la bitácora', () => {
         ).toEqual({});
       }
     });
+  });
+});
+
+describe('F2 / contrato de productos: detalle de marcas', () => {
+  it('conserva el nombre de la marca solo en MARCA_CREADA', () => {
+    expect(sanearDetalle('MARCA_CREADA', { nombre: 'Yanbal' })).toEqual({
+      detalle: { nombre: 'Yanbal' },
+      descartados: [],
+    });
+    expect(sanearDetalle('MARCA_ACTUALIZADA', { nombre: 'Yanbal' })).toEqual({
+      detalle: {},
+      descartados: ['nombre'],
+    });
+  });
+
+  it('MARCA_CREADA sigue descartando valores con forma de dato personal', () => {
+    expect(
+      sanearDetalle('MARCA_CREADA', { nombre: 'ana@ejemplo.test' }).detalle,
+    ).toEqual({});
+  });
+
+  it('conserva la lista de campos cambiados', () => {
+    expect(
+      sanearDetalle('MARCA_ACTUALIZADA', { campos: ['color', 'activa'] }),
+    ).toEqual({ detalle: { campos: ['color', 'activa'] }, descartados: [] });
+    expect(
+      sanearDetalle('PRODUCTO_ACTUALIZADO', {
+        campos: ['precio'],
+        precioAnterior: '12.50',
+        precioNuevo: '13.00',
+      }).descartados,
+    ).toEqual([]);
+  });
+
+  it('descarta una lista con valores prohibidos o con elementos que no son texto', () => {
+    expect(
+      sanearDetalle('MARCA_ACTUALIZADA', {
+        campos: ['color', 'ana@ejemplo.test'],
+      }).detalle,
+    ).toEqual({});
+    expect(
+      sanearDetalle('MARCA_ACTUALIZADA', { campos: ['color', { a: 1 }] })
+        .detalle,
+    ).toEqual({});
+  });
+
+  it('limita la lista a CAMPOS_MAXIMOS elementos', () => {
+    const muchos = Array.from(
+      { length: CAMPOS_MAXIMOS + 5 },
+      (_, i) => `c${i}`,
+    );
+    const { detalle } = sanearDetalle('MARCA_ACTUALIZADA', { campos: muchos });
+    expect(detalle.campos).toHaveLength(CAMPOS_MAXIMOS);
   });
 });

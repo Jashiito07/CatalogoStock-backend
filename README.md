@@ -121,7 +121,25 @@ siempre: el esquema cambia **solo** con migraciones, y cada una implementa `down
 
 Migraciones actuales: `CrearTablaUsuarios` (1.2), `CrearTablaSesiones` (1.3),
 `CrearTablaAuditoria` (1.5), `AgregarAccionesRecuperacionAuditoria` y
-`CrearTablaCodigosRecuperacion` (RF-USU-05).
+`CrearTablaCodigosRecuperacion` (RF-USU-05), `CrearTablaMarcas` y
+`AgregarAccionesCatalogoAuditoria` (2.2: acciones y entidades de marcas, productos e imágenes).
+
+## Marcas (RF-PRO-04, RF-PRO-06, RF-CAT-05, D-43, D-48)
+
+Contrato completo en `docs/contrato-api/productos.md` («Endpoints: marcas»).
+
+| Ruta | Acceso |
+|---|---|
+| `GET /api/v1/marcas` | Autenticado; `incluirInactivas=true` solo lo respeta el Vendedor |
+| `GET /api/v1/marcas/sugeridas` | Vendedor; lista fija con `yaCreada` |
+| `POST /api/v1/marcas` | Vendedor; 201, 409 `MARCA_DUPLICADA` |
+| `PATCH /api/v1/marcas/{id}` | Vendedor; cuerpo parcial, `colorAcento: null` quita el acento |
+
+- No hay `DELETE`: una marca se desactiva (`activa: false`).
+- El nombre es único sin distinguir mayúsculas ni tildes (índice único sobre `nombre_busqueda`).
+- `textoSobreColor` y `textoSobreAcento` los calcula el servidor (contraste ≥ 4.5:1, RNF-11).
+- Cada creación y cambio queda en la bitácora (`MARCA_CREADA`, `MARCA_ACTUALIZADA`) en la
+  misma transacción. Otros módulos usan `MarcasServicio` (`modulos/marcas/index.ts`).
 
 ## Recuperación y cambio de clave (RF-USU-05, D-35, D-39)
 
@@ -237,6 +255,13 @@ src/
       presentacion/http/          Controladores, DTOs y GuardTokenAcceso
       presentacion/cli/           Lógica del comando crear-vendedor
       usuarios.module.ts
+      index.ts                    API pública del módulo
+    marcas/
+      dominio/                    Marca, NombreMarca, color y contraste, marcas sugeridas
+      aplicacion/                 Casos de uso Crear/Actualizar/Listar, MarcasServicio y puerto
+      infraestructura/            Tabla marcas (TypeORM)
+      presentacion/http/          MarcasController y DTOs
+      marcas.module.ts
       index.ts                    API pública del módulo
     salud/
       dominio/                    EstadoSalud
