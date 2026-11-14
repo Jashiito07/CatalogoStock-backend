@@ -8,6 +8,7 @@ import { validarVariablesEntorno } from './configuracion/variables-entorno.js';
 // evitar un ciclo de importaciones con `usuarios` (ver ese archivo).
 import { ConsultaBitacoraModule } from './modulos/auditoria/consulta-bitacora.module.js';
 import { MarcasModule } from './modulos/marcas/index.js';
+import { ProductosModule } from './modulos/productos/index.js';
 import { SaludModule } from './modulos/salud/index.js';
 import { UsuariosModule } from './modulos/usuarios/index.js';
 
@@ -28,6 +29,7 @@ import { UsuariosModule } from './modulos/usuarios/index.js';
     UsuariosModule,
     ConsultaBitacoraModule,
     MarcasModule,
+    ProductosModule,
   ],
 })
 export class AppModule {}
