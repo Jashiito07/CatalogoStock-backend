@@ -122,7 +122,7 @@ siempre: el esquema cambia **solo** con migraciones, y cada una implementa `down
 Migraciones actuales: `CrearTablaUsuarios` (1.2), `CrearTablaSesiones` (1.3),
 `CrearTablaAuditoria` (1.5), `AgregarAccionesRecuperacionAuditoria` y
 `CrearTablaCodigosRecuperacion` (RF-USU-05), `CrearTablaMarcas` y
-`AgregarAccionesCatalogoAuditoria` (2.2: acciones y entidades de marcas, productos e imágenes).
+`AgregarAccionesCatalogoAuditoria` (2.2: acciones y entidades de marcas, productos e imágenes) y\n`CrearTablaProductos` (2.3).
 
 ## Marcas (RF-PRO-04, RF-PRO-06, RF-CAT-05, D-43, D-48)
 
@@ -141,6 +141,27 @@ Contrato completo en `docs/contrato-api/productos.md` («Endpoints: marcas»).
 - Cada creación y cambio queda en la bitácora (`MARCA_CREADA`, `MARCA_ACTUALIZADA`) en la
   misma transacción. Otros módulos usan `MarcasServicio` (`modulos/marcas/index.ts`).
 
+## Productos (RF-PRO-01 a RF-PRO-05, RF-INV-03, RF-CAT-03, PA-07, RN-09)
+
+Contrato completo en `docs/contrato-api/productos.md` («Endpoints: productos»).
+
+| Ruta | Acceso |
+|---|---|
+| `GET /api/v1/productos` | Autenticado; paginación (`pagina`, `tamanio`) y filtros `marcaId`, `busqueda`, `disponibilidad`; orden por nombre |
+| `GET /api/v1/productos/{id}` | Autenticado; 404 si no existe, está eliminado o (Cliente) su marca está inactiva |
+| `POST /api/v1/productos` | Vendedor; 201, 404 (marca inexistente), 422 `MARCA_INACTIVA` |
+| `PATCH /api/v1/productos/{id}` | Vendedor; cuerpo parcial; un cambio de precio guarda `precioAnterior` y `precioNuevo` en la bitácora |
+| `DELETE /api/v1/productos/{id}` | Vendedor; 204, eliminación lógica; un segundo `DELETE` responde 404 |
+
+- El precio viaja como texto decimal (`"12.50"`, de `0.01` a `99999.99`, máximo 2 decimales) y se guarda
+  en `numeric(7,2)` con `CHECK (precio > 0)`; en el código se usa `Dinero` (exacto, sin `number`).
+- La búsqueda ignora mayúsculas y tildes sobre nombre y descripción (columnas `nombre_busqueda` y
+  `descripcion_busqueda`). Los agotados se incluyen en el listado.
+- Eliminación lógica (PA-07): `eliminado_en` con fecha; la fila se conserva. Al Cliente solo se le
+  muestran productos de marcas activas.
+- Bitácora en la misma transacción: `PRODUCTO_CREADO`, `PRODUCTO_ACTUALIZADO`, `PRODUCTO_ELIMINADO`.
+  Otros módulos (imágenes en 2.4) usan `ProductosServicio` (`modulos/productos/index.ts`); `productos` usa
+  `MarcasServicio` y nunca lee la tabla `marcas`. La respuesta incluye `imagenes: []` hasta la 2.4.
 ## Recuperación y cambio de clave (RF-USU-05, D-35, D-39)
 
 Contrato completo en `docs/contrato-api/recuperacion-clave.md`.
@@ -262,6 +283,13 @@ src/
       infraestructura/            Tabla marcas (TypeORM)
       presentacion/http/          MarcasController y DTOs
       marcas.module.ts
+      index.ts                    API pública del módulo
+    productos/
+      dominio/                    Producto (precio con Dinero), Disponibilidad, búsqueda sin tildes
+      aplicacion/                 Casos de uso Listar/Obtener/Crear/Actualizar/Eliminar, ProductosServicio y puertos
+      infraestructura/            Tabla productos (TypeORM) y adaptador de MarcasServicio
+      presentacion/http/          ProductosController y DTOs
+      productos.module.ts
       index.ts                    API pública del módulo
     salud/
       dominio/                    EstadoSalud

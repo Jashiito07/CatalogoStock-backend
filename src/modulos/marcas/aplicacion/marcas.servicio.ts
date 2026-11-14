@@ -15,6 +15,12 @@ export class MarcasServicio {
     return marca === null ? null : marca.aPublica();
   }
 
+  /** Las marcas ordenadas por `orden` y nombre; con `false`, solo las activas. */
+  async listar(incluirInactivas: boolean): Promise<MarcaPublica[]> {
+    const marcas = await this.marcas.listar(incluirInactivas);
+    return marcas.map((marca) => marca.aPublica());
+  }
+
   /** Las marcas que existen entre los ids dados, sin orden garantizado. */
   async buscarPorIds(ids: readonly string[]): Promise<MarcaPublica[]> {
     const marcas = await this.marcas.buscarPorIds(ids);
