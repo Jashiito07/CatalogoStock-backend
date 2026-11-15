@@ -44,7 +44,17 @@ describe('D-17: límite de intentos por IP', () => {
       RENOVACION: { limite: 10, ventanaMs: 60_000 },
       RECUPERACION: { limite: 5, ventanaMs: 60_000 },
       CAMBIO_CLAVE: { limite: 5, ventanaMs: 60_000 },
+      SOLICITUD_CODIGO_CORREO: { limite: 3, ventanaMs: 60_000 },
+      CONFIRMACION_CORREO: { limite: 5, ventanaMs: 60_000 },
       SUBIDA_IMAGENES: { limite: 30, ventanaMs: 60_000 },
+    });
+    expect(limitador('SOLICITUD_CODIGO_CORREO')).toMatchObject({
+      limit: 3,
+      ttl: 60_000,
+    });
+    expect(limitador('CONFIRMACION_CORREO')).toMatchObject({
+      limit: 5,
+      ttl: 60_000,
     });
     expect(limitador('INGRESO')).toMatchObject({ limit: 5, ttl: 60_000 });
     expect(limitador('RECUPERACION')).toMatchObject({ limit: 5, ttl: 60_000 });

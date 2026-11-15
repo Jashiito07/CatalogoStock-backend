@@ -207,6 +207,28 @@ Contrato completo en `docs/contrato-api/recuperacion-clave.md`.
 - Recuperar la clave cierra **todas** las sesiones del Cliente; cambiarla con sesión cierra
   las demás y conserva la de `tokenRenovacionActual` (si se envía).
 
+## Correo: verificación y recuperación por correo (RF-USU-05, D-35 opción B, D-50)
+
+Contrato en `docs/contrato-api/correo.md`. Usa `nodemailer` detrás del puerto `EnviadorCorreo`.
+
+| Ruta | Acceso | Respuesta |
+|---|---|---|
+| `POST /api/v1/usuarios/yo/correo/verificacion` | Autenticado; 3 envíos por hora y cuenta | 204 · 409 `CORREO_YA_VERIFICADO` · 429 · 503 `CORREO_NO_DISPONIBLE` |
+| `POST /api/v1/usuarios/yo/correo/confirmacion` | Autenticado; 5 por minuto por IP | 204 · 422 `CODIGO_INVALIDO` |
+| `POST /api/v1/autenticacion/recuperacion/solicitud` | Público; 3 por minuto por IP y 3 envíos por hora y cuenta | **204 siempre** |
+
+- El código solo se envía al correo **registrado** de una cuenta activa con el correo verificado; la
+  solicitud pública responde igual exista o no la cuenta y el envío sigue en segundo plano.
+- El código usa las reglas de `codigos_recuperacion` (6 dígitos, 15 min, un uso, 5 intentos, HMAC con
+  `RECUPERACION_SECRETO`) con la columna `proposito`. `POST /autenticacion/recuperacion` acepta el código
+  del Vendedor o el del correo (también para el Vendedor, solo con código de correo).
+- Un fallo del SMTP nunca rompe la API: la solicitud pública sigue en 204 y la verificación da 503
+  genérico. El log solo guarda el código de error (`EAUTH`…), nunca correos, códigos ni claves.
+- Variables (en `.env.example`, con valores falsos): `CORREO_ACTIVO`, `SMTP_SERVIDOR`, `SMTP_PUERTO`,
+  `SMTP_USUARIO`, `SMTP_CLAVE` (contraseña de aplicación, solo en su `.env`) y `CORREO_REMITENTE`.
+  Con `CORREO_ACTIVO=false` no se envía nada y no se exigen las demás.
+- Las pruebas usan un transporte falso en memoria: **nunca envían correos reales**.
+
 ## Pruebas e2e (base `catalogostock_pruebas`, D-23)
 
 Las pruebas e2e levantan la API completa contra una base **local y exclusiva de

@@ -18,6 +18,7 @@ export const UsuarioMapeador = {
       activo: fila.activo,
       privacidadAceptadaEn: fila.fechaAceptacionPrivacidad,
       versionPrivacidad: fila.versionPrivacidad,
+      correoVerificadoEn: fila.correoVerificadoEn,
       creadoEn: fila.fechaCreacion,
       actualizadoEn: fila.fechaActualizacion,
     });
@@ -34,6 +35,7 @@ export const UsuarioMapeador = {
     fila.activo = usuario.activo;
     fila.fechaAceptacionPrivacidad = usuario.privacidadAceptadaEn;
     fila.versionPrivacidad = usuario.versionPrivacidad;
+    fila.correoVerificadoEn = usuario.correoVerificadoEn;
     fila.fechaCreacion = usuario.creadoEn;
     fila.fechaActualizacion = usuario.actualizadoEn;
     return fila;

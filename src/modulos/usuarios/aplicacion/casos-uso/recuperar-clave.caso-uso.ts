@@ -7,6 +7,7 @@ import {
   esFormatoCodigoRecuperacion,
   MENSAJE_CODIGO_FORMATO,
   type MotivoRecuperacionFallida,
+  PROPOSITOS_RECUPERACION,
 } from '../../dominio/codigo-recuperacion.js';
 import { Correo } from '../../dominio/correo.js';
 import { errorDeCampo } from '../../dominio/error-campo.js';
@@ -27,16 +28,18 @@ type ResultadoIntento =
   { exito: true } | { exito: false; motivo: MotivoRecuperacionFallida };
 
 /**
- * El Cliente cambia su clave olvidada con el código que le dio el Vendedor
- * (RF-USU-05, D-35, D-39).
+ * La cuenta cambia su clave olvidada con el código que le dio el Vendedor
+ * (recuperación asistida) o que el sistema le envió a su correo verificado
+ * (RF-USU-05, D-35, D-39, contrato de correo): el endpoint acepta cualquiera.
  *
  * Éxito (204), en una sola transacción: hash bcrypt de la clave nueva
- * (RNF-02), código marcado como usado, **todas** las sesiones del Cliente
- * revocadas (D-09) y `CLAVE_RESTABLECIDA` (`origen: CODIGO_VENDEDOR`).
+ * (RNF-02), código marcado como usado, **todas** las sesiones de la cuenta
+ * revocadas (D-09) y `CLAVE_RESTABLECIDA` (`origen: CODIGO_VENDEDOR` o
+ * `CODIGO_CORREO`).
  *
- * Fallo: siempre el mismo 422 `CODIGO_INVALIDO` (correo inexistente o del
- * Vendedor, cuenta inactiva, sin código, vencido, usado, agotado o
- * incorrecto). Un código incorrecto suma un intento al código vigente (al
+ * Fallo: siempre el mismo 422 `CODIGO_INVALIDO` (correo inexistente, cuenta
+ * inactiva, Vendedor sin código de correo, sin código, vencido, usado,
+ * agotado o incorrecto). Un código incorrecto suma un intento al código vigente (al
  * quinto queda invalidado) y ese intento se confirma aunque la respuesta sea
  * un error. `RECUPERACION_FALLIDA` (correo intentado y motivo, D-20) se
  * registra fuera de la transacción y sin interrumpir la respuesta.
@@ -60,9 +63,8 @@ export class RecuperarClaveCasoUso {
       throw errorDeCampo('codigo', MENSAJE_CODIGO_FORMATO);
     }
     const cuenta = await this.buscarCuenta(datos.correo);
-    // Solo un Cliente activo recupera su clave con un código; el Vendedor usa
-    // el comando del servidor (D-35).
-    if (cuenta === null || !cuenta.esCliente() || !cuenta.activo) {
+    // Solo una cuenta activa recupera su clave con un código.
+    if (cuenta === null || !cuenta.activo) {
       throw await this.rechazar(datos, cuenta, 'NO_CLIENTE');
     }
     const usuario = cuenta;
@@ -72,7 +74,16 @@ export class RecuperarClaveCasoUso {
         const ahora = this.reloj.ahora();
         const codigo = await this.codigos.buscarUltimoParaActualizar(
           usuario.id,
+          PROPOSITOS_RECUPERACION,
         );
+        // El Vendedor no usa la recuperación asistida (D-35): solo sirve un
+        // código que el sistema le envió a su correo verificado.
+        if (
+          usuario.esVendedor() &&
+          (codigo === null || codigo.proposito !== 'RECUPERACION_CORREO')
+        ) {
+          return { exito: false, motivo: 'NO_CLIENTE' };
+        }
         if (codigo === null) {
           return { exito: false, motivo: 'SIN_CODIGO' };
         }
@@ -101,7 +112,13 @@ export class RecuperarClaveCasoUso {
           idUsuario: usuario.id,
           entidad: 'USUARIO',
           idEntidad: usuario.id,
-          detalle: { origen: 'CODIGO_VENDEDOR', sesionesRevocadas },
+          detalle: {
+            origen:
+              codigo.proposito === 'RECUPERACION_CORREO'
+                ? 'CODIGO_CORREO'
+                : 'CODIGO_VENDEDOR',
+            sesionesRevocadas,
+          },
         });
         return { exito: true };
       },

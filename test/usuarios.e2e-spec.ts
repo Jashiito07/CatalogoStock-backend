@@ -138,6 +138,7 @@ describe('Subfase 1.3 (e2e): registro, inicio de sesión y tokens', () => {
 
       expect(Object.keys(respuesta.body as object).toSorted()).toEqual([
         'correo',
+        'correoVerificadoEn',
         'creadoEn',
         'id',
         'nombre',

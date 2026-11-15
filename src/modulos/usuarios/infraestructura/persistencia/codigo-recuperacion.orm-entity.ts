@@ -7,22 +7,30 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import {
+  PROPOSITOS_CODIGO,
+  type PropositoCodigo,
+} from '../../dominio/codigo-recuperacion.js';
 import { UsuarioOrmEntity } from './usuario.orm-entity.js';
 
 /**
- * Tabla `codigos_recuperacion` (RF-USU-05, D-35, D-39). Migración:
- * CrearTablaCodigosRecuperacion.
+ * Tabla `codigos_recuperacion` (RF-USU-05, D-35, D-39). Migraciones:
+ * CrearTablaCodigosRecuperacion y AgregarCorreoVerificadoYPropositoCodigos.
  *
  * Solo se guarda el HMAC-SHA256 del código (`hash_codigo`), nunca el código.
  * Un código «pendiente» no tiene `fecha_uso` ni `fecha_invalidacion`; la base
- * admite uno solo por Cliente (`uq_codigos_recuperacion_pendiente`).
+ * admite uno solo por usuario y propósito (`uq_codigos_recuperacion_pendiente`).
  */
 @Entity('codigos_recuperacion')
 @Index('ix_codigos_recuperacion_usuario_fecha', ['idUsuario', 'fechaCreacion'])
-@Index('uq_codigos_recuperacion_pendiente', ['idUsuario'], {
+@Index('uq_codigos_recuperacion_pendiente', ['idUsuario', 'proposito'], {
   unique: true,
   where: 'fecha_uso IS NULL AND fecha_invalidacion IS NULL',
 })
+@Check(
+  'ck_codigos_recuperacion_generado_por',
+  `proposito <> 'RECUPERACION_ASISTIDA' OR generado_por IS NOT NULL`,
+)
 @Check(
   'ck_codigos_recuperacion_vencimiento',
   'fecha_vencimiento > fecha_creacion',
@@ -55,9 +63,21 @@ export class CodigoRecuperacionOrmEntity {
   @Column({ name: 'hash_codigo', type: 'char', length: 64 })
   hashCodigo: string;
 
-  /** Vendedor que generó el código. */
-  @Column({ name: 'generado_por', type: 'uuid' })
-  generadoPor: string;
+  /**
+   * Para qué se generó el código. Los códigos anteriores al contrato de correo
+   * son de recuperación asistida.
+   */
+  @Column({
+    type: 'enum',
+    enum: PROPOSITOS_CODIGO,
+    enumName: 'proposito_codigo',
+    default: 'RECUPERACION_ASISTIDA',
+  })
+  proposito: PropositoCodigo;
+
+  /** Vendedor que generó el código; `null` si lo generó el sistema (correo). */
+  @Column({ name: 'generado_por', type: 'uuid', nullable: true })
+  generadoPor: string | null;
 
   @Column({
     name: 'fecha_creacion',

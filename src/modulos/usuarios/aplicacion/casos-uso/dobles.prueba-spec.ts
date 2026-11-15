@@ -16,8 +16,14 @@ import {
   type BusquedaClientes,
   normalizarParaBusqueda,
 } from '../../dominio/busqueda-clientes.js';
-import { CodigoRecuperacion } from '../../dominio/codigo-recuperacion.js';
+import {
+  CodigoRecuperacion,
+  finVentanaEnvios,
+  type PropositoCodigo,
+  propositosDelGrupo,
+} from '../../dominio/codigo-recuperacion.js';
 import { Correo } from '../../dominio/correo.js';
+import { CorreoNoDisponibleError } from '../../dominio/errores-correo.js';
 import {
   CorreoYaRegistradoError,
   VendedorYaExisteError,
@@ -41,7 +47,15 @@ import type {
   PaginaUsuarios,
   UsuarioRepositorio,
 } from '../puertos/usuario.repositorio.js';
-import type { CodigoRecuperacionRepositorio } from '../puertos/codigo-recuperacion.repositorio.js';
+import type {
+  CodigoRecuperacionRepositorio,
+  LimiteEmision,
+  ResultadoEmision,
+} from '../puertos/codigo-recuperacion.repositorio.js';
+import type {
+  EnviadorCorreo,
+  MensajeCorreo,
+} from '../puertos/enviador-correo.puerto.js';
 import type { ProtectorCodigoRecuperacion } from '../puertos/protector-codigo-recuperacion.puerto.js';
 
 export const INICIO = new Date('2026-11-05T15:00:00.000Z');
@@ -123,6 +137,29 @@ export class UsuarioRepositorioEnMemoria implements UsuarioRepositorio {
         activo: u.activo,
         privacidadAceptadaEn: u.privacidadAceptadaEn,
         versionPrivacidad: u.versionPrivacidad,
+        correoVerificadoEn: u.correoVerificadoEn,
+        creadoEn: u.creadoEn,
+        actualizadoEn: ahora,
+      });
+    }
+    return Promise.resolve();
+  }
+
+  marcarCorreoVerificado(idUsuario: string, ahora: Date): Promise<void> {
+    const indice = this.usuarios.findIndex((u) => u.id === idUsuario);
+    if (indice >= 0) {
+      const u = this.usuarios[indice];
+      this.usuarios[indice] = Usuario.reconstituir({
+        id: u.id,
+        nombre: u.nombre,
+        correo: u.correo,
+        telefono: u.telefono,
+        hashClave: u.hashClave,
+        rol: u.rol,
+        activo: u.activo,
+        privacidadAceptadaEn: u.privacidadAceptadaEn,
+        versionPrivacidad: u.versionPrivacidad,
+        correoVerificadoEn: ahora,
         creadoEn: u.creadoEn,
         actualizadoEn: ahora,
       });
@@ -376,14 +413,37 @@ function copiarCodigo(codigo: CodigoRecuperacion): CodigoRecuperacion {
   });
 }
 
-/** Repositorio de códigos en memoria con la regla «uno pendiente por Cliente». */
+/** Repositorio de códigos en memoria con la regla «uno pendiente por usuario y grupo de propósitos». */
 export class CodigoRecuperacionRepositorioEnMemoria implements CodigoRecuperacionRepositorio {
   readonly codigos: CodigoRecuperacion[] = [];
 
-  reemplazarPendientes(nuevo: CodigoRecuperacion, ahora: Date): Promise<void> {
+  emitir(
+    nuevo: CodigoRecuperacion,
+    ahora: Date,
+    limite?: LimiteEmision,
+  ): Promise<ResultadoEmision> {
+    if (limite !== undefined) {
+      const recientes = this.codigos
+        .filter(
+          (c) =>
+            c.idUsuario === nuevo.idUsuario &&
+            c.proposito === nuevo.proposito &&
+            c.creadoEn.getTime() > limite.desde.getTime(),
+        )
+        .toSorted((a, b) => a.creadoEn.getTime() - b.creadoEn.getTime());
+      if (recientes.length >= limite.maximo) {
+        const aExpirar = recientes[recientes.length - limite.maximo];
+        return Promise.resolve({
+          emitido: false,
+          disponibleEn: finVentanaEnvios(aExpirar.creadoEn),
+        });
+      }
+    }
+    const grupo = propositosDelGrupo(nuevo.proposito);
     this.codigos.forEach((codigo, indice) => {
       if (
         codigo.idUsuario === nuevo.idUsuario &&
+        grupo.includes(codigo.proposito) &&
         codigo.usadoEn === null &&
         codigo.invalidadoEn === null
       ) {
@@ -395,14 +455,17 @@ export class CodigoRecuperacionRepositorioEnMemoria implements CodigoRecuperacio
       }
     });
     this.codigos.push(copiarCodigo(nuevo));
-    return Promise.resolve();
+    return Promise.resolve({ emitido: true });
   }
 
   buscarUltimoParaActualizar(
     idUsuario: string,
+    propositos: readonly PropositoCodigo[],
   ): Promise<CodigoRecuperacion | null> {
-    const delCliente = this.codigos.filter((c) => c.idUsuario === idUsuario);
-    const ultimo = delCliente.at(-1);
+    const delUsuario = this.codigos.filter(
+      (c) => c.idUsuario === idUsuario && propositos.includes(c.proposito),
+    );
+    const ultimo = delUsuario.at(-1);
     return Promise.resolve(ultimo ? copiarCodigo(ultimo) : null);
   }
 
@@ -421,7 +484,11 @@ export class CodigoRecuperacionRepositorioEnMemoria implements CodigoRecuperacio
     const resultado = new Map<string, Date>();
     for (const codigo of this.codigos) {
       const hasta = codigo.vigenteHasta(ahora);
-      if (idsUsuarios.includes(codigo.idUsuario) && hasta !== null) {
+      if (
+        codigo.proposito === 'RECUPERACION_ASISTIDA' &&
+        idsUsuarios.includes(codigo.idUsuario) &&
+        hasta !== null
+      ) {
         resultado.set(codigo.idUsuario, hasta);
       }
     }
@@ -494,7 +561,47 @@ export function desactivar(usuario: Usuario): Usuario {
     activo: false,
     privacidadAceptadaEn: usuario.privacidadAceptadaEn,
     versionPrivacidad: usuario.versionPrivacidad,
+    correoVerificadoEn: usuario.correoVerificadoEn,
     creadoEn: usuario.creadoEn,
     actualizadoEn: usuario.actualizadoEn,
   });
+}
+
+/** Mismo usuario con el correo ya verificado en `cuando`. */
+export function conCorreoVerificado(
+  usuario: Usuario,
+  cuando: Date = INICIO,
+): Usuario {
+  return Usuario.reconstituir({
+    id: usuario.id,
+    nombre: usuario.nombre,
+    correo: usuario.correo,
+    telefono: usuario.telefono,
+    hashClave: usuario.hashClave,
+    rol: usuario.rol,
+    activo: usuario.activo,
+    privacidadAceptadaEn: usuario.privacidadAceptadaEn,
+    versionPrivacidad: usuario.versionPrivacidad,
+    correoVerificadoEn: cuando,
+    creadoEn: usuario.creadoEn,
+    actualizadoEn: usuario.actualizadoEn,
+  });
+}
+
+/**
+ * Envío de correo en memoria: guarda lo «enviado» y puede fallar como el
+ * adaptador real (`CorreoNoDisponibleError`). Nunca envía nada de verdad.
+ */
+export class EnviadorCorreoFalso implements EnviadorCorreo {
+  readonly enviados: MensajeCorreo[] = [];
+  /** Con `true`, el envío falla como un servicio de correo caído. */
+  fallar = false;
+
+  enviar(mensaje: MensajeCorreo): Promise<void> {
+    if (this.fallar) {
+      return Promise.reject(new CorreoNoDisponibleError());
+    }
+    this.enviados.push(structuredClone(mensaje));
+    return Promise.resolve();
+  }
 }

@@ -33,6 +33,10 @@ const VALORES_FIJOS: Readonly<Record<string, string>> = {
   JWT_VIDA_ACCESO_SEGUNDOS: '900',
   RENOVACION_VIDA_DIAS: '7',
   PROXY_SALTOS_CONFIABLES: '0',
+  // D-50: el correo va apagado y, además, `crearAppPruebas` sustituye el
+  // transporte por uno falso en memoria. Las pruebas nunca envían correos
+  // reales ni leen credenciales SMTP.
+  CORREO_ACTIVO: 'false',
   // Carpeta TEMPORAL del sistema: las pruebas nunca escriben en la carpeta de
   // desarrollo (`./almacenamiento`). Cada suite que sube archivos la borra al terminar.
   RUTA_ALMACENAMIENTO: join(tmpdir(), 'catalogostock-e2e-almacenamiento'),

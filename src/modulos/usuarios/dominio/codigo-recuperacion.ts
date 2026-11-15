@@ -16,12 +16,71 @@ export const VIGENCIA_CODIGO_MINUTOS = 15;
 /** Al quinto intento fallido el código queda invalidado. */
 export const INTENTOS_MAXIMOS_CODIGO = 5;
 
+/** Máximo de códigos enviados por correo a una misma cuenta y propósito en una hora (contrato de correo, D-17). */
+export const ENVIOS_MAXIMOS_POR_VENTANA = 3;
+/** Ventana del límite de envíos: una hora. */
+export const VENTANA_ENVIOS_MINUTOS = 60;
+
 const PATRON_CODIGO = /^\d{6}$/;
 const MILISEGUNDOS_POR_MINUTO = 60 * 1000;
 
 export const MENSAJE_CODIGO_FORMATO = 'El código debe tener 6 dígitos.';
 export const MENSAJE_CODIGO_INVALIDO =
   'El código no es válido o ya venció. Pide uno nuevo a tu vendedor.';
+/** Mensaje único de la verificación del correo (contrato de correo). */
+export const MENSAJE_CODIGO_VERIFICACION_INVALIDO =
+  'El código no es válido o ya venció. Pide uno nuevo.';
+
+/**
+ * Para qué se generó el código (contrato de correo, «Modelo de datos»):
+ * - `RECUPERACION_ASISTIDA`: lo genera el Vendedor para un Cliente (RF-USU-05).
+ * - `RECUPERACION_CORREO`: el sistema lo envía al correo verificado de la cuenta.
+ * - `VERIFICACION_CORREO`: el sistema lo envía para verificar el correo.
+ */
+export const PROPOSITOS_CODIGO = [
+  'RECUPERACION_ASISTIDA',
+  'RECUPERACION_CORREO',
+  'VERIFICACION_CORREO',
+] as const;
+
+export type PropositoCodigo = (typeof PROPOSITOS_CODIGO)[number];
+
+/** Propósitos que sirven en `POST /autenticacion/recuperacion`, sea quien sea que generó el código. */
+export const PROPOSITOS_RECUPERACION: readonly PropositoCodigo[] = [
+  'RECUPERACION_ASISTIDA',
+  'RECUPERACION_CORREO',
+];
+
+export const PROPOSITOS_VERIFICACION: readonly PropositoCodigo[] = [
+  'VERIFICACION_CORREO',
+];
+
+/**
+ * Propósitos que se reemplazan entre sí: un código nuevo invalida el pendiente
+ * de su mismo grupo (los dos de recuperación forman un grupo; la verificación
+ * del correo, otro).
+ */
+export function propositosDelGrupo(
+  proposito: PropositoCodigo,
+): readonly PropositoCodigo[] {
+  return proposito === 'VERIFICACION_CORREO'
+    ? PROPOSITOS_VERIFICACION
+    : PROPOSITOS_RECUPERACION;
+}
+
+/** Inicio de la ventana del límite de envíos que termina en `ahora`. */
+export function inicioVentanaEnvios(ahora: Date): Date {
+  return new Date(
+    ahora.getTime() - VENTANA_ENVIOS_MINUTOS * MILISEGUNDOS_POR_MINUTO,
+  );
+}
+
+/** Momento en que vuelve a haber un envío disponible si el más antiguo de la ventana se creó en `creadoEn`. */
+export function finVentanaEnvios(creadoEn: Date): Date {
+  return new Date(
+    creadoEn.getTime() + VENTANA_ENVIOS_MINUTOS * MILISEGUNDOS_POR_MINUTO,
+  );
+}
 
 /** `true` si el texto tiene exactamente 6 dígitos ASCII. */
 export function esFormatoCodigoRecuperacion(valor: unknown): valor is string {
@@ -65,8 +124,11 @@ export type MotivoRecuperacionFallida =
  * El motivo queda solo en la bitácora.
  */
 export class CodigoRecuperacionInvalidoError extends ReglaNegocioError {
-  constructor(readonly motivo: MotivoRecuperacionFallida) {
-    super('CODIGO_INVALIDO', MENSAJE_CODIGO_INVALIDO);
+  constructor(
+    readonly motivo: MotivoRecuperacionFallida,
+    mensaje: string = MENSAJE_CODIGO_INVALIDO,
+  ) {
+    super('CODIGO_INVALIDO', mensaje);
   }
 }
 
@@ -79,8 +141,10 @@ export interface PropiedadesCodigoRecuperacion {
   idUsuario: string;
   /** HMAC-SHA256 del código con `RECUPERACION_SECRETO`; nunca el código. */
   hashCodigo: string;
-  /** Vendedor que lo generó. */
-  generadoPor: string;
+  /** Para qué se generó (recuperación asistida, por correo o verificación del correo). */
+  proposito: PropositoCodigo;
+  /** Vendedor que lo generó; `null` cuando lo genera el sistema (correo). */
+  generadoPor: string | null;
   creadoEn: Date;
   venceEn: Date;
   usadoEn: Date | null;
@@ -92,7 +156,9 @@ export interface DatosNuevoCodigoRecuperacion {
   id: string;
   idUsuario: string;
   hashCodigo: string;
-  generadoPor: string;
+  proposito: PropositoCodigo;
+  /** Obligatorio solo en `RECUPERACION_ASISTIDA`; `null` si lo genera el sistema. */
+  generadoPor: string | null;
   ahora: Date;
 }
 
@@ -115,6 +181,8 @@ export class CodigoNoVigenteError extends Error {
  * - Generar uno nuevo invalida el anterior (`INVALIDADO`): el repositorio lo
  *   garantiza con un índice único parcial (uno pendiente por Cliente).
  * - Uso, agotamiento e invalidación tienen prioridad sobre el vencimiento.
+ * - Contrato de correo: el mismo código sirve para recuperar la clave (asistido
+ *   o por correo) o para verificar el correo, según su `proposito`.
  */
 export class CodigoRecuperacion {
   readonly #propiedades: PropiedadesCodigoRecuperacion;
@@ -122,6 +190,17 @@ export class CodigoRecuperacion {
   private constructor(propiedades: PropiedadesCodigoRecuperacion) {
     if (propiedades.hashCodigo.length === 0) {
       throw new Error('El código de recuperación debe tener su hash.');
+    }
+    if (!PROPOSITOS_CODIGO.includes(propiedades.proposito)) {
+      throw new Error('El código de recuperación tiene un propósito inválido.');
+    }
+    if (
+      propiedades.proposito === 'RECUPERACION_ASISTIDA' &&
+      propiedades.generadoPor === null
+    ) {
+      throw new Error(
+        'El código de recuperación asistida debe indicar el Vendedor que lo generó.',
+      );
     }
     if (propiedades.venceEn.getTime() <= propiedades.creadoEn.getTime()) {
       throw new Error(
@@ -146,6 +225,7 @@ export class CodigoRecuperacion {
       id: datos.id,
       idUsuario: datos.idUsuario,
       hashCodigo: datos.hashCodigo,
+      proposito: datos.proposito,
       generadoPor: datos.generadoPor,
       creadoEn: datos.ahora,
       venceEn: calcularVencimientoCodigo(datos.ahora),
@@ -174,7 +254,11 @@ export class CodigoRecuperacion {
     return this.#propiedades.hashCodigo;
   }
 
-  get generadoPor(): string {
+  get proposito(): PropositoCodigo {
+    return this.#propiedades.proposito;
+  }
+
+  get generadoPor(): string | null {
     return this.#propiedades.generadoPor;
   }
 

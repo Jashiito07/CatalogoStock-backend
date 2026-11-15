@@ -61,12 +61,13 @@ export class GenerarCodigoRecuperacionCasoUso {
       id: this.generadorId.generar(),
       idUsuario: cliente.id,
       hashCodigo: this.protector.calcularHash(codigo),
+      proposito: 'RECUPERACION_ASISTIDA',
       generadoPor: datos.idVendedor,
       ahora,
     });
 
     await this.unidadTrabajo.ejecutar(async () => {
-      await this.codigos.reemplazarPendientes(registro, ahora);
+      await this.codigos.emitir(registro, ahora);
       await this.auditoria.registrar({
         accion: 'CODIGO_RECUPERACION_GENERADO',
         idUsuario: datos.idVendedor,

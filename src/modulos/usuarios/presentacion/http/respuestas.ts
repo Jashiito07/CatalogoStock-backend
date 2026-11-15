@@ -15,6 +15,8 @@ export interface RespuestaUsuario {
   rol: Rol;
   privacidadAceptadaEn: string | null;
   versionPrivacidad: string | null;
+  /** Cuándo se verificó el correo; `null` si falta (la app avisa «Verifica tu correo»). */
+  correoVerificadoEn: string | null;
   creadoEn: string;
 }
 
@@ -98,6 +100,7 @@ export function aRespuestaUsuario(usuario: UsuarioPublico): RespuestaUsuario {
     rol: usuario.rol,
     privacidadAceptadaEn: usuario.privacidadAceptadaEn?.toISOString() ?? null,
     versionPrivacidad: usuario.versionPrivacidad,
+    correoVerificadoEn: usuario.correoVerificadoEn?.toISOString() ?? null,
     creadoEn: usuario.creadoEn.toISOString(),
   };
 }

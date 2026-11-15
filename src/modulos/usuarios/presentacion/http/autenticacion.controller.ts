@@ -12,10 +12,14 @@ import { CerrarSesionCasoUso } from '../../aplicacion/casos-uso/cerrar-sesion.ca
 import { IniciarSesionCasoUso } from '../../aplicacion/casos-uso/iniciar-sesion.caso-uso.js';
 import { RecuperarClaveCasoUso } from '../../aplicacion/casos-uso/recuperar-clave.caso-uso.js';
 import { RenovarSesionCasoUso } from '../../aplicacion/casos-uso/renovar-sesion.caso-uso.js';
+import { SolicitarRecuperacionPorCorreoCasoUso } from '../../aplicacion/casos-uso/solicitar-recuperacion-por-correo.caso-uso.js';
 import type { Canal } from '../../dominio/canal.js';
 import type { ActorAutenticado } from '../../dominio/propiedad.js';
 import { IngresoDto, TokenRenovacionDto } from './dto/autenticacion.dto.js';
-import { RecuperacionClaveDto } from './dto/clave.dto.js';
+import {
+  RecuperacionClaveDto,
+  SolicitudRecuperacionCorreoDto,
+} from './dto/clave.dto.js';
 import { aRespuestaSesion, type RespuestaSesion } from './respuestas.js';
 import { UsuarioActual } from './usuario-actual.js';
 
@@ -34,6 +38,8 @@ export class AutenticacionController {
     private readonly cerrarSesion: CerrarSesionCasoUso,
     @Inject(RecuperarClaveCasoUso)
     private readonly recuperarClave: RecuperarClaveCasoUso,
+    @Inject(SolicitarRecuperacionPorCorreoCasoUso)
+    private readonly solicitarRecuperacion: SolicitarRecuperacionPorCorreoCasoUso,
   ) {}
 
   /** POST /api/v1/autenticacion/ingreso/cliente — público; app móvil, solo Clientes (D-19). */
@@ -80,6 +86,23 @@ export class AutenticacionController {
       codigo: cuerpo.codigo,
       claveNueva: cuerpo.claveNueva,
     });
+  }
+
+  /**
+   * POST /api/v1/autenticacion/recuperacion/solicitud — público (contrato de
+   * correo, RF-USU-05). **Siempre 204**, exista o no la cuenta: el código solo
+   * se envía al correo registrado de una cuenta activa con el correo
+   * verificado. 3 por minuto por IP (D-17) y 3 envíos por hora por cuenta.
+   */
+  @Post('recuperacion/solicitud')
+  @Publico()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @LimiteIntentos('SOLICITUD_CODIGO_CORREO')
+  async solicitarRecuperacionPorCorreo(
+    @Body() cuerpo: SolicitudRecuperacionCorreoDto,
+  ): Promise<void> {
+    // El envío sigue en segundo plano: la respuesta tarda igual exista o no la cuenta.
+    await this.solicitarRecuperacion.ejecutar(cuerpo.correo);
   }
 
   /**

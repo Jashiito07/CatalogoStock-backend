@@ -8,6 +8,7 @@ export const CodigoRecuperacionMapeador = {
       id: fila.id,
       idUsuario: fila.idUsuario,
       hashCodigo: fila.hashCodigo,
+      proposito: fila.proposito,
       generadoPor: fila.generadoPor,
       creadoEn: fila.fechaCreacion,
       venceEn: fila.fechaVencimiento,
@@ -22,6 +23,7 @@ export const CodigoRecuperacionMapeador = {
     fila.id = codigo.id;
     fila.idUsuario = codigo.idUsuario;
     fila.hashCodigo = codigo.hashCodigo;
+    fila.proposito = codigo.proposito;
     fila.generadoPor = codigo.generadoPor;
     fila.fechaCreacion = codigo.creadoEn;
     fila.fechaVencimiento = codigo.venceEn;

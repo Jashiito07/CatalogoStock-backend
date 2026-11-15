@@ -17,12 +17,14 @@ import { Publico } from '../../../../compartido/presentacion/publico.js';
 import type { RespuestaError } from '../../../../compartido/presentacion/respuesta-error.js';
 import { MENSAJES_HTTP } from '../../../../compartido/presentacion/respuesta-error.js';
 import { CambiarClaveCasoUso } from '../../aplicacion/casos-uso/cambiar-clave.caso-uso.js';
+import { ConfirmarCorreoCasoUso } from '../../aplicacion/casos-uso/confirmar-correo.caso-uso.js';
 import { ConsultarUsuarioActualCasoUso } from '../../aplicacion/casos-uso/consultar-usuario-actual.caso-uso.js';
 import { GenerarCodigoRecuperacionCasoUso } from '../../aplicacion/casos-uso/generar-codigo-recuperacion.caso-uso.js';
 import { ListarClientesCasoUso } from '../../aplicacion/casos-uso/listar-clientes.caso-uso.js';
 import { RegistrarClienteCasoUso } from '../../aplicacion/casos-uso/registrar-cliente.caso-uso.js';
+import { SolicitarVerificacionCorreoCasoUso } from '../../aplicacion/casos-uso/solicitar-verificacion-correo.caso-uso.js';
 import type { ActorAutenticado } from '../../dominio/propiedad.js';
-import { CambioClaveDto } from './dto/clave.dto.js';
+import { CambioClaveDto, ConfirmacionCorreoDto } from './dto/clave.dto.js';
 import { ConsultaClientesDto } from './dto/consulta-clientes.dto.js';
 import { RegistroClienteDto } from './dto/registro-cliente.dto.js';
 import {
@@ -64,6 +66,10 @@ export class UsuariosController {
     private readonly generarCodigo: GenerarCodigoRecuperacionCasoUso,
     @Inject(CambiarClaveCasoUso)
     private readonly cambiarClave: CambiarClaveCasoUso,
+    @Inject(SolicitarVerificacionCorreoCasoUso)
+    private readonly solicitarVerificacion: SolicitarVerificacionCorreoCasoUso,
+    @Inject(ConfirmarCorreoCasoUso)
+    private readonly confirmarVerificacion: ConfirmarCorreoCasoUso,
   ) {}
 
   /**
@@ -137,6 +143,38 @@ export class UsuariosController {
       claveActual: cuerpo.claveActual,
       claveNueva: cuerpo.claveNueva,
       tokenRenovacionActual: cuerpo.tokenRenovacionActual,
+    });
+  }
+
+  /**
+   * POST /api/v1/usuarios/yo/correo/verificacion — autenticado (contrato de
+   * correo). Propiedad: envía el código solo al correo registrado de la cuenta
+   * del token. 204; 409 si ya está verificado; 429 al pasar de 3 por hora;
+   * 503 si el servicio de correo falla.
+   */
+  @Post('yo/correo/verificacion')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async solicitarVerificacionCorreo(
+    @UsuarioActual() actor: ActorAutenticado,
+  ): Promise<void> {
+    await this.solicitarVerificacion.ejecutar(actor.id);
+  }
+
+  /**
+   * POST /api/v1/usuarios/yo/correo/confirmacion — autenticado (contrato de
+   * correo). Propiedad: solo verifica el correo de la cuenta del token. 204;
+   * 422 `CODIGO_INVALIDO` (mensaje único). 5 por minuto por IP.
+   */
+  @Post('yo/correo/confirmacion')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @LimiteIntentos('CONFIRMACION_CORREO')
+  async confirmarCorreo(
+    @UsuarioActual() actor: ActorAutenticado,
+    @Body() cuerpo: ConfirmacionCorreoDto,
+  ): Promise<void> {
+    await this.confirmarVerificacion.ejecutar({
+      idUsuario: actor.id,
+      codigo: cuerpo.codigo,
     });
   }
 

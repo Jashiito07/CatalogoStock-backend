@@ -109,6 +109,7 @@ describe('RF-USU-01 / CA-01 / D-07 / D-11: RegistrarClienteCasoUso', () => {
       rol: 'CLIENTE',
       privacidadAceptadaEn: INICIO,
       versionPrivacidad: '2026-11-1',
+      correoVerificadoEn: null,
       creadoEn: INICIO,
     });
     expect(usuarios.usuarios).toHaveLength(1);

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
-import { plainToInstance, Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -9,6 +10,7 @@ import {
   Min,
   MinLength,
   validateSync,
+  ValidateIf,
 } from 'class-validator';
 
 /** Costo de bcrypt por defecto (D-08, contrato de usuarios). */
@@ -148,6 +150,56 @@ export class VariablesEntorno {
   @IsString()
   @IsNotEmpty({ message: 'RUTA_ALMACENAMIENTO no puede estar vacía' })
   RUTA_ALMACENAMIENTO: string = RUTA_ALMACENAMIENTO_POR_DEFECTO;
+
+  /**
+   * Interruptor del envío de correo (verificación del correo y recuperación de
+   * clave, D-50). Obligatorio: `true` envía por SMTP; `false` no envía nada
+   * (solo deja en el log que se omitió el envío, sin destinatario ni código) y
+   * entonces las variables SMTP_* y CORREO_REMITENTE no se exigen.
+   */
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean({ message: 'CORREO_ACTIVO debe ser true o false' })
+  CORREO_ACTIVO!: boolean;
+
+  /** Servidor SMTP (por ejemplo `smtp.gmail.com`). Solo con CORREO_ACTIVO=true. */
+  @ValidateIf(correoActivo)
+  @IsString()
+  @IsNotEmpty({ message: 'SMTP_SERVIDOR es obligatoria con CORREO_ACTIVO=true' })
+  SMTP_SERVIDOR!: string;
+
+  /** Puerto SMTP: 465 usa TLS directo; otro puerto (587) usa STARTTLS. */
+  @ValidateIf(correoActivo)
+  @Type(() => Number)
+  @IsInt({ message: 'SMTP_PUERTO debe ser un número entero' })
+  @Min(1)
+  @Max(65535)
+  SMTP_PUERTO!: number;
+
+  @ValidateIf(correoActivo)
+  @IsString()
+  @IsNotEmpty({ message: 'SMTP_USUARIO es obligatoria con CORREO_ACTIVO=true' })
+  SMTP_USUARIO!: string;
+
+  /** Contraseña de aplicación del correo. Secreto: solo en `.env`, nunca en Git ni en logs. */
+  @ValidateIf(correoActivo)
+  @IsString()
+  @IsNotEmpty({ message: 'SMTP_CLAVE es obligatoria con CORREO_ACTIVO=true' })
+  SMTP_CLAVE!: string;
+
+  /** Remitente visible, por ejemplo `CatálogoStock <correo@ejemplo.com>`. */
+  @ValidateIf(correoActivo)
+  @IsString()
+  @IsNotEmpty({
+    message: 'CORREO_REMITENTE es obligatoria con CORREO_ACTIVO=true',
+  })
+  CORREO_REMITENTE!: string;
+}
+
+/** Las variables SMTP_* y CORREO_REMITENTE solo se exigen con el envío activo. */
+function correoActivo(variables: VariablesEntorno): boolean {
+  return variables.CORREO_ACTIVO === true;
 }
 
 /**

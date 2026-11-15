@@ -39,6 +39,7 @@ const REGISTRO_MARIA = {
 
 const CAMPOS_USUARIO_PUBLICO = [
   'correo',
+  'correoVerificadoEn',
   'creadoEn',
   'id',
   'nombre',

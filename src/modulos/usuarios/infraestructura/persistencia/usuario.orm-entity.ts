@@ -65,6 +65,13 @@ export class UsuarioOrmEntity {
   })
   versionPrivacidad: string | null;
 
+  /**
+   * Cuándo se verificó el correo con un código enviado a él (contrato de
+   * correo). `null`: sin verificar (también las cuentas anteriores a esta función).
+   */
+  @Column({ name: 'correo_verificado_en', type: 'timestamptz', nullable: true })
+  correoVerificadoEn: Date | null;
+
   @Column({
     name: 'fecha_creacion',
     type: 'timestamptz',

@@ -13,6 +13,16 @@ const VARIABLES_VALIDAS = {
   BD_CLAVE: 'clave_falsa',
   JWT_SECRETO: 'secreto_falso_de_pruebas_con_32_caracteres_o_mas',
   RECUPERACION_SECRETO: 'otro_secreto_falso_de_pruebas_de_32_caracteres',
+  CORREO_ACTIVO: 'false',
+};
+
+/** Variables SMTP falsas para probar CORREO_ACTIVO=true (nada real). */
+const VARIABLES_SMTP = {
+  SMTP_SERVIDOR: 'smtp.ejemplo.test',
+  SMTP_PUERTO: '465',
+  SMTP_USUARIO: 'cuenta.falsa@ejemplo.test',
+  SMTP_CLAVE: 'clave-de-aplicacion-falsa',
+  CORREO_REMITENTE: 'CatálogoStock <cuenta.falsa@ejemplo.test>',
 };
 
 describe('Configuración: validación de variables de entorno al arrancar', () => {
@@ -138,6 +148,83 @@ describe('Configuración: validación de variables de entorno al arrancar', () =
         RECUPERACION_SECRETO: 'x'.repeat(32),
       }).RECUPERACION_SECRETO,
     ).toHaveLength(32);
+  });
+
+  describe('D-50: correo (CORREO_ACTIVO y SMTP_*)', () => {
+    it('con CORREO_ACTIVO=false no se exigen las variables SMTP_* ni CORREO_REMITENTE', () => {
+      const variables = validarVariablesEntorno({ ...VARIABLES_VALIDAS });
+
+      expect(variables.CORREO_ACTIVO).toBe(false);
+    });
+
+    it('con CORREO_ACTIVO=true acepta la configuración SMTP y convierte el puerto', () => {
+      const variables = validarVariablesEntorno({
+        ...VARIABLES_VALIDAS,
+        CORREO_ACTIVO: 'true',
+        ...VARIABLES_SMTP,
+      });
+
+      expect(variables.CORREO_ACTIVO).toBe(true);
+      expect(variables.SMTP_PUERTO).toBe(465);
+      expect(variables.SMTP_SERVIDOR).toBe('smtp.ejemplo.test');
+    });
+
+    it.each(Object.keys(VARIABLES_SMTP))(
+      'con CORREO_ACTIVO=true falla si falta %s',
+      (nombre) => {
+        const variables: Record<string, unknown> = {
+          ...VARIABLES_VALIDAS,
+          CORREO_ACTIVO: 'true',
+          ...VARIABLES_SMTP,
+        };
+        delete variables[nombre];
+
+        expect(() => validarVariablesEntorno(variables)).toThrow(nombre);
+      },
+    );
+
+    it.each(['si', '1', 'TRUE', ''])(
+      'CORREO_ACTIVO rechaza el valor "%s" (solo true o false)',
+      (valor) => {
+        expect(() =>
+          validarVariablesEntorno({
+            ...VARIABLES_VALIDAS,
+            CORREO_ACTIVO: valor,
+          }),
+        ).toThrow('CORREO_ACTIVO');
+      },
+    );
+
+    it.each(['0', '65536', 'smtp'])(
+      'con CORREO_ACTIVO=true rechaza SMTP_PUERTO = "%s"',
+      (valor) => {
+        expect(() =>
+          validarVariablesEntorno({
+            ...VARIABLES_VALIDAS,
+            CORREO_ACTIVO: 'true',
+            ...VARIABLES_SMTP,
+            SMTP_PUERTO: valor,
+          }),
+        ).toThrow('SMTP_PUERTO');
+      },
+    );
+
+    it('el error no muestra la contraseña SMTP ni el usuario', () => {
+      let mensaje = '';
+      try {
+        validarVariablesEntorno({
+          ...VARIABLES_VALIDAS,
+          CORREO_ACTIVO: 'true',
+          ...VARIABLES_SMTP,
+          SMTP_PUERTO: 'no-es-un-puerto',
+        });
+      } catch (error) {
+        mensaje = (error as Error).message;
+      }
+      expect(mensaje).toContain('SMTP_PUERTO');
+      expect(mensaje).not.toContain(VARIABLES_SMTP.SMTP_CLAVE);
+      expect(mensaje).not.toContain(VARIABLES_SMTP.SMTP_USUARIO);
+    });
   });
 
   it('el error no expone el valor de los secretos', () => {

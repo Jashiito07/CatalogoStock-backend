@@ -29,6 +29,11 @@ export const GRUPOS_LIMITE_INTENTOS = {
   // RF-USU-05 (contrato de recuperación de clave): 5 por minuto cada una.
   RECUPERACION: { limite: 5, ventanaMs: 60_000 },
   CAMBIO_CLAVE: { limite: 5, ventanaMs: 60_000 },
+  // Código por correo (contrato de correo): la solicitud pública admite 3 por
+  // minuto por IP (D-17); confirmar el correo, 5 por minuto. Además hay un
+  // límite de 3 envíos por hora y por cuenta en el caso de uso.
+  SOLICITUD_CODIGO_CORREO: { limite: 3, ventanaMs: 60_000 },
+  CONFIRMACION_CORREO: { limite: 5, ventanaMs: 60_000 },
   // RF-PRO-01 (contrato de productos, imágenes): 30 subidas por minuto. Se
   // cuenta por IP, como los demás grupos (el guard corre antes de la sesión).
   SUBIDA_IMAGENES: { limite: 30, ventanaMs: 60_000 },
