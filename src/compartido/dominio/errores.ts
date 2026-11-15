@@ -10,6 +10,8 @@ export type CategoriaErrorDominio =
   | 'NO_ENCONTRADO'
   | 'CONFLICTO'
   | 'REGLA_NEGOCIO'
+  | 'DEMASIADAS_SOLICITUDES'
+  | 'SERVICIO_NO_DISPONIBLE'
   | 'CONTENIDO_DEMASIADO_GRANDE'
   | 'CONTENIDO_NO_ADMITIDO';
 
@@ -81,6 +83,16 @@ export class ConflictoError extends ErrorDominio {
 /** Una regla de negocio impide la operación, p. ej. `TRANSICION_NO_PERMITIDA` (HTTP 422). */
 export class ReglaNegocioError extends ErrorDominio {
   readonly categoria = 'REGLA_NEGOCIO';
+}
+
+/** Se superó un límite de uso por cuenta, p. ej. `DEMASIADAS_SOLICITUDES` (HTTP 429). */
+export class DemasiadasSolicitudesError extends ErrorDominio {
+  readonly categoria = 'DEMASIADAS_SOLICITUDES';
+}
+
+/** Un servicio externo no responde, p. ej. `CORREO_NO_DISPONIBLE` (HTTP 503). */
+export class ServicioNoDisponibleError extends ErrorDominio {
+  readonly categoria = 'SERVICIO_NO_DISPONIBLE';
 }
 
 /** Un archivo supera el tamaño permitido (HTTP 413, p. ej. `ARCHIVO_DEMASIADO_GRANDE`). */

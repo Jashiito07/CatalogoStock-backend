@@ -9,6 +9,8 @@ import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module.js';
 import { configurarAplicacionHttp } from '../../src/configuracion/aplicacion-http.js';
 import { ConexionBaseDatosServicio } from '../../src/configuracion/conexion-base-datos.servicio.js';
+import { ENVIADOR_CORREO } from '../../src/modulos/usuarios/index.js';
+import { CorreoFalso } from './correo-falso.js';
 import { asegurarBasePruebas } from './entorno-pruebas.js';
 
 export const ORIGEN_PRUEBAS = 'http://localhost:4200';
@@ -35,6 +37,8 @@ export class AlmacenLimiteReiniciable implements ThrottlerStorage {
 export interface AppPruebas {
   app: INestApplication;
   fuente: DataSource;
+  /** Transporte de correo falso: la API nunca envía un correo real en las pruebas (D-50). */
+  correo: CorreoFalso;
   /** Vacía todas las tablas (salvo `migraciones`) y reinicia el límite de intentos. */
   limpiar(): Promise<void>;
   cerrar(): Promise<void>;
@@ -58,6 +62,7 @@ export async function crearAppPruebas(
 ): Promise<AppPruebas> {
   asegurarBasePruebas(process.env.BD_NOMBRE);
   const almacen = new AlmacenLimiteReiniciable();
+  const correo = new CorreoFalso();
 
   const modulo = await Test.createTestingModule({
     imports: [AppModule],
@@ -68,6 +73,9 @@ export async function crearAppPruebas(
     .useValue({})
     .overrideProvider(getStorageToken())
     .useValue(almacen)
+    // Nunca se envían correos reales: el transporte es un doble en memoria.
+    .overrideProvider(ENVIADOR_CORREO)
+    .useValue(correo)
     .compile();
 
   const app = modulo.createNestApplication<INestApplication>({
@@ -88,6 +96,7 @@ export async function crearAppPruebas(
   return {
     app,
     fuente,
+    correo,
     async limpiar() {
       asegurarBasePruebas(base);
       const tablas = await fuente.query<{ tabla: string }[]>(
@@ -99,6 +108,7 @@ export async function crearAppPruebas(
         await fuente.query(`TRUNCATE ${lista} RESTART IDENTITY CASCADE`);
       }
       almacen.reiniciar();
+      correo.reiniciar();
     },
     async cerrar() {
       await app.close();

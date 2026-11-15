@@ -123,6 +123,13 @@ export class UsuarioRepositorioTypeorm implements UsuarioRepositorio {
     );
   }
 
+  async marcarCorreoVerificado(idUsuario: string, ahora: Date): Promise<void> {
+    await this.filas.update(
+      { id: idUsuario },
+      { correoVerificadoEn: ahora, fechaActualizacion: ahora },
+    );
+  }
+
   /**
    * Búsqueda sin mayúsculas ni tildes con `translate(lower(…))` y la misma
    * tabla de letras que el dominio (sin la extensión `unaccent`). Los

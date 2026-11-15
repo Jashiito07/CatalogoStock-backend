@@ -33,6 +33,23 @@ export class RecuperacionClaveDto {
   claveNueva: string;
 }
 
+/**
+ * Cuerpo de `POST /api/v1/autenticacion/recuperacion/solicitud` (contrato de
+ * correo): el correo **de la cuenta**. Formato inválido → 400 sin repetir el valor.
+ */
+export class SolicitudRecuperacionCorreoDto {
+  @CumpleReglaDominio((valor) => Correo.crear(valor), MENSAJE_CORREO_INVALIDO)
+  correo: string;
+}
+
+/** Cuerpo de `POST /api/v1/usuarios/yo/correo/confirmacion` (contrato de correo). */
+export class ConfirmacionCorreoDto {
+  /** Exactamente 6 dígitos (`000000` a `999999`). */
+  @IsString({ message: MENSAJE_CODIGO_FORMATO })
+  @Matches(/^\d{6}$/, { message: MENSAJE_CODIGO_FORMATO })
+  codigo: string;
+}
+
 /** Cuerpo de `POST /api/v1/usuarios/yo/clave` (RF-USU-05, cambio con sesión). */
 export class CambioClaveDto {
   /** Solo se exige que venga; si no coincide → 422 `CLAVE_ACTUAL_INCORRECTA`. */

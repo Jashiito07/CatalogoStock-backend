@@ -17,6 +17,11 @@ export const ACCIONES_AUDITORIA = [
   'CLAVE_RESTABLECIDA',
   'RECUPERACION_FALLIDA',
   'CLAVE_CAMBIADA',
+  // Correo (contrato de correo, D-50): verificación del correo y recuperación
+  // por correo. Migración AgregarCorreoVerificadoYPropositoCodigos.
+  'CORREO_VERIFICADO',
+  'CODIGO_CORREO_ENVIADO',
+  'SOLICITUD_RECUPERACION_IGNORADA',
   // F2: marcas, productos e imágenes (contrato de productos). Migración
   // AgregarAccionesCatalogoAuditoria.
   'MARCA_CREADA',
@@ -63,6 +68,9 @@ export const ENTIDAD_DE_LA_ACCION: Readonly<
   CLAVE_RESTABLECIDA: 'USUARIO',
   RECUPERACION_FALLIDA: 'USUARIO',
   CLAVE_CAMBIADA: 'USUARIO',
+  CORREO_VERIFICADO: 'USUARIO',
+  CODIGO_CORREO_ENVIADO: 'USUARIO',
+  SOLICITUD_RECUPERACION_IGNORADA: 'USUARIO',
   MARCA_CREADA: 'MARCA',
   MARCA_ACTUALIZADA: 'MARCA',
   PRODUCTO_CREADO: 'PRODUCTO',

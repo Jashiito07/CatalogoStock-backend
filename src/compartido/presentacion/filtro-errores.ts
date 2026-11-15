@@ -26,6 +26,8 @@ const ESTADO_POR_CATEGORIA: Readonly<Record<CategoriaErrorDominio, number>> = {
   NO_ENCONTRADO: HttpStatus.NOT_FOUND,
   CONFLICTO: HttpStatus.CONFLICT,
   REGLA_NEGOCIO: HttpStatus.UNPROCESSABLE_ENTITY,
+  DEMASIADAS_SOLICITUDES: HttpStatus.TOO_MANY_REQUESTS,
+  SERVICIO_NO_DISPONIBLE: HttpStatus.SERVICE_UNAVAILABLE,
   CONTENIDO_DEMASIADO_GRANDE: HttpStatus.PAYLOAD_TOO_LARGE,
   CONTENIDO_NO_ADMITIDO: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
 };
@@ -81,7 +83,13 @@ export class FiltroErrores implements ExceptionFilter {
     const solicitud = http.getRequest<Request>();
 
     const resultado = this.resolver(excepcion);
-    if (resultado.estado >= 500) {
+    if (resultado.estado >= 500 && excepcion instanceof ErrorDominio) {
+      // Fallo previsto de un servicio externo (p. ej. CORREO_NO_DISPONIBLE):
+      // solo el hecho, sin traza ni datos de la solicitud.
+      this.logger.warn(
+        `${excepcion.codigo} en ${solicitud.method} ${solicitud.path}`,
+      );
+    } else if (resultado.estado >= 500) {
       const traza = excepcion instanceof Error ? excepcion.stack : undefined;
       this.logger.error(
         `Error no controlado en ${solicitud.method} ${solicitud.path}`,

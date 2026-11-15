@@ -22,6 +22,15 @@ import {
 } from '../auditoria/index.js';
 import { CambiarClaveCasoUso } from './aplicacion/casos-uso/cambiar-clave.caso-uso.js';
 import { CerrarSesionCasoUso } from './aplicacion/casos-uso/cerrar-sesion.caso-uso.js';
+import { ConfirmarCorreoCasoUso } from './aplicacion/casos-uso/confirmar-correo.caso-uso.js';
+import { SolicitarRecuperacionPorCorreoCasoUso } from './aplicacion/casos-uso/solicitar-recuperacion-por-correo.caso-uso.js';
+import { SolicitarVerificacionCorreoCasoUso } from './aplicacion/casos-uso/solicitar-verificacion-correo.caso-uso.js';
+import {
+  ENVIADOR_CORREO,
+  type EnviadorCorreo,
+} from './aplicacion/puertos/enviador-correo.puerto.js';
+import { EnviadorCorreoApagado } from './infraestructura/correo/enviador-correo.apagado.js';
+import { EnviadorCorreoNodemailer } from './infraestructura/correo/enviador-correo.nodemailer.js';
 import { GenerarCodigoRecuperacionCasoUso } from './aplicacion/casos-uso/generar-codigo-recuperacion.caso-uso.js';
 import { ListarClientesCasoUso } from './aplicacion/casos-uso/listar-clientes.caso-uso.js';
 import { RecuperarClaveCasoUso } from './aplicacion/casos-uso/recuperar-clave.caso-uso.js';
@@ -419,6 +428,118 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
           codigos,
           protector,
           generadorHash,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
+    },
+    // Contrato de correo (D-50): envío de correo, verificación del correo y
+    // recuperación por correo. En las pruebas, ENVIADOR_CORREO se sustituye
+    // por un transporte falso en memoria: nunca se envían correos reales.
+    {
+      provide: ENVIADOR_CORREO,
+      inject: [ConfigService],
+      useFactory: (configuracion: Configuracion): EnviadorCorreo =>
+        configuracion.get('CORREO_ACTIVO', { infer: true })
+          ? new EnviadorCorreoNodemailer({
+              servidor: configuracion.get('SMTP_SERVIDOR', { infer: true }),
+              puerto: configuracion.get('SMTP_PUERTO', { infer: true }),
+              usuario: configuracion.get('SMTP_USUARIO', { infer: true }),
+              clave: configuracion.get('SMTP_CLAVE', { infer: true }),
+              remitente: configuracion.get('CORREO_REMITENTE', {
+                infer: true,
+              }),
+            })
+          : new EnviadorCorreoApagado(),
+    },
+    {
+      provide: SolicitarVerificacionCorreoCasoUso,
+      inject: [
+        USUARIO_REPOSITORIO,
+        CODIGO_RECUPERACION_REPOSITORIO,
+        PROTECTOR_CODIGO_RECUPERACION,
+        ENVIADOR_CORREO,
+        GENERADOR_ID,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        codigos: CodigoRecuperacionRepositorio,
+        protector: ProtectorCodigoRecuperacion,
+        enviador: EnviadorCorreo,
+        generadorId: GeneradorId,
+        reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
+      ) =>
+        new SolicitarVerificacionCorreoCasoUso(
+          usuarios,
+          codigos,
+          protector,
+          enviador,
+          generadorId,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
+    },
+    {
+      provide: ConfirmarCorreoCasoUso,
+      inject: [
+        USUARIO_REPOSITORIO,
+        CODIGO_RECUPERACION_REPOSITORIO,
+        PROTECTOR_CODIGO_RECUPERACION,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        codigos: CodigoRecuperacionRepositorio,
+        protector: ProtectorCodigoRecuperacion,
+        reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
+      ) =>
+        new ConfirmarCorreoCasoUso(
+          usuarios,
+          codigos,
+          protector,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
+    },
+    {
+      provide: SolicitarRecuperacionPorCorreoCasoUso,
+      inject: [
+        USUARIO_REPOSITORIO,
+        CODIGO_RECUPERACION_REPOSITORIO,
+        PROTECTOR_CODIGO_RECUPERACION,
+        ENVIADOR_CORREO,
+        GENERADOR_ID,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        codigos: CodigoRecuperacionRepositorio,
+        protector: ProtectorCodigoRecuperacion,
+        enviador: EnviadorCorreo,
+        generadorId: GeneradorId,
+        reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
+      ) =>
+        new SolicitarRecuperacionPorCorreoCasoUso(
+          usuarios,
+          codigos,
+          protector,
+          enviador,
+          generadorId,
           reloj,
           unidadTrabajo,
           auditoria,

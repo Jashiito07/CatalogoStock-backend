@@ -17,6 +17,8 @@ export interface PropiedadesUsuario {
   privacidadAceptadaEn: Date | null;
   /** Versión del aviso aceptado (D-11); `null` solo para el Vendedor semilla. */
   versionPrivacidad: string | null;
+  /** Cuándo se verificó el correo con un código (contrato de correo); `null` si aún no. */
+  correoVerificadoEn: Date | null;
   creadoEn: Date;
   actualizadoEn: Date;
 }
@@ -45,6 +47,7 @@ export interface UsuarioPublico {
   rol: Rol;
   privacidadAceptadaEn: Date | null;
   versionPrivacidad: string | null;
+  correoVerificadoEn: Date | null;
   creadoEn: Date;
 }
 
@@ -92,6 +95,7 @@ export class Usuario {
       activo: true,
       privacidadAceptadaEn: datos.ahora,
       versionPrivacidad: datos.versionPrivacidad,
+      correoVerificadoEn: null,
       creadoEn: datos.ahora,
       actualizadoEn: datos.ahora,
     });
@@ -112,6 +116,7 @@ export class Usuario {
       activo: true,
       privacidadAceptadaEn: null,
       versionPrivacidad: null,
+      correoVerificadoEn: null,
       creadoEn: datos.ahora,
       actualizadoEn: datos.ahora,
     });
@@ -158,6 +163,10 @@ export class Usuario {
     return this.#propiedades.versionPrivacidad;
   }
 
+  get correoVerificadoEn(): Date | null {
+    return this.#propiedades.correoVerificadoEn;
+  }
+
   get creadoEn(): Date {
     return this.#propiedades.creadoEn;
   }
@@ -174,6 +183,11 @@ export class Usuario {
     return this.#propiedades.rol === 'CLIENTE';
   }
 
+  /** `true` si el correo se verificó con un código (la recuperación por correo lo exige). */
+  tieneCorreoVerificado(): boolean {
+    return this.#propiedades.correoVerificadoEn !== null;
+  }
+
   /** Datos que se pueden mostrar o devolver por la API. */
   aPublico(): UsuarioPublico {
     return {
@@ -184,6 +198,7 @@ export class Usuario {
       rol: this.rol,
       privacidadAceptadaEn: this.privacidadAceptadaEn,
       versionPrivacidad: this.versionPrivacidad,
+      correoVerificadoEn: this.correoVerificadoEn,
       creadoEn: this.creadoEn,
     };
   }

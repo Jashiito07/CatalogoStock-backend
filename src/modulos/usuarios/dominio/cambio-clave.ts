@@ -21,7 +21,8 @@ export const MENSAJE_VENDEDOR_NO_EXISTE =
   'No existe un Vendedor. Créelo primero con npm run crear-vendedor.';
 
 /** Origen de un `CLAVE_RESTABLECIDA` (contrato de auditoría). */
-export type OrigenRestablecimiento = 'CODIGO_VENDEDOR' | 'COMANDO_SERVIDOR';
+export type OrigenRestablecimiento =
+  'CODIGO_VENDEDOR' | 'CODIGO_CORREO' | 'COMANDO_SERVIDOR';
 
 /**
  * Valida la clave nueva con las reglas de la clave (8 a 72 caracteres y como

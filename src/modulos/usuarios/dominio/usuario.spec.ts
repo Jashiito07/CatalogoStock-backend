@@ -31,6 +31,7 @@ function propiedades(
     activo: true,
     privacidadAceptadaEn: AHORA,
     versionPrivacidad: '2026-11-1',
+    correoVerificadoEn: null,
     creadoEn: AHORA,
     actualizadoEn: AHORA,
     ...cambios,
@@ -117,6 +118,7 @@ describe('RF-USU-02: entidad Usuario', () => {
         rol: 'VENDEDOR',
         privacidadAceptadaEn: null,
         versionPrivacidad: null,
+        correoVerificadoEn: null,
         creadoEn: AHORA,
       });
       expect(JSON.stringify(publico)).not.toContain(HASH_FICTICIO);

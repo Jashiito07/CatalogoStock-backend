@@ -12,10 +12,17 @@ import {
   hayTransaccionEnCurso,
   repositorioEnCurso,
 } from '../../../../compartido/infraestructura/unidad-trabajo.typeorm.js';
-import type { CodigoRecuperacionRepositorio } from '../../aplicacion/puertos/codigo-recuperacion.repositorio.js';
+import type {
+  CodigoRecuperacionRepositorio,
+  LimiteEmision,
+  ResultadoEmision,
+} from '../../aplicacion/puertos/codigo-recuperacion.repositorio.js';
 import {
   type CodigoRecuperacion,
+  finVentanaEnvios,
   INTENTOS_MAXIMOS_CODIGO,
+  type PropositoCodigo,
+  propositosDelGrupo,
 } from '../../dominio/codigo-recuperacion.js';
 import { CodigoRecuperacionMapeador } from './codigo-recuperacion.mapeador.js';
 import { CodigoRecuperacionOrmEntity } from './codigo-recuperacion.orm-entity.js';
@@ -43,19 +50,44 @@ export class CodigoRecuperacionRepositorioTypeorm implements CodigoRecuperacionR
   }
 
   /**
-   * Bloquea la fila del Cliente en `usuarios` (`FOR UPDATE`) para que dos
-   * generaciones simultáneas no choquen con el índice único parcial: la
-   * segunda espera, invalida el código de la primera y guarda el suyo.
+   * Bloquea la fila del usuario en `usuarios` (`FOR UPDATE`) para que dos
+   * emisiones simultáneas no choquen con el índice único parcial ni se salten
+   * el límite: la segunda espera, cuenta los códigos ya guardados, invalida el
+   * pendiente de la primera y guarda el suyo.
    */
-  reemplazarPendientes(nuevo: CodigoRecuperacion, ahora: Date): Promise<void> {
+  emitir(
+    nuevo: CodigoRecuperacion,
+    ahora: Date,
+    limite?: LimiteEmision,
+  ): Promise<ResultadoEmision> {
     return this.enTransaccion(async (manejador) => {
       await manejador.query('SELECT 1 FROM usuarios WHERE id = $1 FOR UPDATE', [
         nuevo.idUsuario,
       ]);
+      if (limite !== undefined) {
+        const recientes = await manejador.find(CodigoRecuperacionOrmEntity, {
+          select: { fechaCreacion: true },
+          where: {
+            idUsuario: nuevo.idUsuario,
+            proposito: nuevo.proposito,
+            fechaCreacion: MoreThan(limite.desde),
+          },
+          order: { fechaCreacion: 'ASC' },
+        });
+        if (recientes.length >= limite.maximo) {
+          // Se libera un envío cuando vence el más antiguo que sobra.
+          const quePasaAExpirar = recientes[recientes.length - limite.maximo];
+          return {
+            emitido: false,
+            disponibleEn: finVentanaEnvios(quePasaAExpirar.fechaCreacion),
+          };
+        }
+      }
       await manejador.update(
         CodigoRecuperacionOrmEntity,
         {
           idUsuario: nuevo.idUsuario,
+          proposito: In([...propositosDelGrupo(nuevo.proposito)]),
           fechaUso: IsNull(),
           fechaInvalidacion: IsNull(),
         },
@@ -65,15 +97,17 @@ export class CodigoRecuperacionRepositorioTypeorm implements CodigoRecuperacionR
         CodigoRecuperacionOrmEntity,
         CodigoRecuperacionMapeador.aPersistencia(nuevo),
       );
+      return { emitido: true };
     });
   }
 
   /** `pessimistic_write` exige una transacción: TypeORM falla si no la hay. */
   async buscarUltimoParaActualizar(
     idUsuario: string,
+    propositos: readonly PropositoCodigo[],
   ): Promise<CodigoRecuperacion | null> {
     const fila = await this.filas.findOne({
-      where: { idUsuario },
+      where: { idUsuario, proposito: In([...propositos]) },
       // `id` desempata dos códigos creados en el mismo instante.
       order: { fechaCreacion: 'DESC', id: 'DESC' },
       lock: { mode: 'pessimistic_write' },
@@ -103,6 +137,7 @@ export class CodigoRecuperacionRepositorioTypeorm implements CodigoRecuperacionR
       select: { idUsuario: true, fechaVencimiento: true },
       where: {
         idUsuario: In([...idsUsuarios]),
+        proposito: 'RECUPERACION_ASISTIDA',
         fechaUso: IsNull(),
         fechaInvalidacion: IsNull(),
         fechaVencimiento: MoreThan(ahora),

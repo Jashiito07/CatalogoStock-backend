@@ -37,6 +37,11 @@ export interface UsuarioRepositorio {
     ahora: Date,
   ): Promise<void>;
   /**
+   * Guarda la fecha en que se verificó el correo (contrato de correo), dentro
+   * de la transacción en curso si la hay.
+   */
+  marcarCorreoVerificado(idUsuario: string, ahora: Date): Promise<void>;
+  /**
    * Solo usuarios con rol `CLIENTE`, del más reciente al más antiguo, con la
    * búsqueda sin mayúsculas ni tildes en nombre, correo y teléfono.
    */

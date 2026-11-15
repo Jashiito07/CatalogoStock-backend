@@ -19,6 +19,7 @@ function nuevo(): CodigoRecuperacion {
     id: 'id-codigo',
     idUsuario: 'id-cliente',
     hashCodigo: 'hash-del-codigo',
+    proposito: 'RECUPERACION_ASISTIDA',
     generadoPor: 'id-vendedor',
     ahora: AHORA,
   });
