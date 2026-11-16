@@ -8,6 +8,7 @@ import {
   Inject,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -17,6 +18,7 @@ import { Publico } from '../../../../compartido/presentacion/publico.js';
 import type { RespuestaError } from '../../../../compartido/presentacion/respuesta-error.js';
 import { MENSAJES_HTTP } from '../../../../compartido/presentacion/respuesta-error.js';
 import { CambiarClaveCasoUso } from '../../aplicacion/casos-uso/cambiar-clave.caso-uso.js';
+import { CambiarEstadoUsuarioCasoUso } from '../../aplicacion/casos-uso/cambiar-estado-usuario.caso-uso.js';
 import { ConfirmarCorreoCasoUso } from '../../aplicacion/casos-uso/confirmar-correo.caso-uso.js';
 import { ConsultarUsuarioActualCasoUso } from '../../aplicacion/casos-uso/consultar-usuario-actual.caso-uso.js';
 import { GenerarCodigoRecuperacionCasoUso } from '../../aplicacion/casos-uso/generar-codigo-recuperacion.caso-uso.js';
@@ -26,6 +28,7 @@ import { SolicitarVerificacionCorreoCasoUso } from '../../aplicacion/casos-uso/s
 import type { ActorAutenticado } from '../../dominio/propiedad.js';
 import { CambioClaveDto, ConfirmacionCorreoDto } from './dto/clave.dto.js';
 import { ConsultaClientesDto } from './dto/consulta-clientes.dto.js';
+import { EstadoUsuarioDto } from './dto/estado-usuario.dto.js';
 import { RegistroClienteDto } from './dto/registro-cliente.dto.js';
 import {
   aRespuestaCodigoGenerado,
@@ -70,6 +73,8 @@ export class UsuariosController {
     private readonly solicitarVerificacion: SolicitarVerificacionCorreoCasoUso,
     @Inject(ConfirmarCorreoCasoUso)
     private readonly confirmarVerificacion: ConfirmarCorreoCasoUso,
+    @Inject(CambiarEstadoUsuarioCasoUso)
+    private readonly cambiarEstadoUsuario: CambiarEstadoUsuarioCasoUso,
   ) {}
 
   /**
@@ -108,6 +113,7 @@ export class UsuariosController {
       await this.listarClientes.ejecutar(
         consulta.busqueda,
         paginacionDe(consulta),
+        consulta.activo,
       ),
     );
   }
@@ -176,6 +182,28 @@ export class UsuariosController {
       idUsuario: actor.id,
       codigo: cuerpo.codigo,
     });
+  }
+
+  /**
+   * PATCH /api/v1/usuarios/{id}/estado - solo el Vendedor (contrato
+   * usuarios-gestion, D-53, RF-USU-03, CA-02). Desactiva (`activo: false`,
+   * revoca las sesiones) o reactiva a un Cliente. Un Cliente recibe 403 y
+   * queda `ACCESO_DENEGADO` (guard global de roles). 200 con el Usuario.
+   */
+  @Patch(':id/estado')
+  @Roles('VENDEDOR')
+  async cambiarEstado(
+    @UsuarioActual() actor: ActorAutenticado,
+    @Param('id', idUuid) idUsuario: string,
+    @Body() cuerpo: EstadoUsuarioDto,
+  ): Promise<RespuestaUsuario> {
+    return aRespuestaUsuario(
+      await this.cambiarEstadoUsuario.ejecutar({
+        idVendedor: actor.id,
+        idUsuario,
+        activo: cuerpo.activo,
+      }),
+    );
   }
 
   /**

@@ -38,6 +38,7 @@ const REGISTRO_MARIA = {
 };
 
 const CAMPOS_USUARIO_PUBLICO = [
+  'activo',
   'correo',
   'correoVerificadoEn',
   'creadoEn',

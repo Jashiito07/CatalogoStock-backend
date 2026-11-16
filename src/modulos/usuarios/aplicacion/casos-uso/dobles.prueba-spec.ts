@@ -168,9 +168,37 @@ export class UsuarioRepositorioEnMemoria implements UsuarioRepositorio {
   }
 
   /** Mismo filtro que el adaptador: solo Clientes, sin mayúsculas ni tildes. */
+  actualizarActivo(
+    idUsuario: string,
+    activo: boolean,
+    ahora: Date,
+  ): Promise<boolean> {
+    const indice = this.usuarios.findIndex((u) => u.id === idUsuario);
+    if (indice < 0 || this.usuarios[indice].activo === activo) {
+      return Promise.resolve(false);
+    }
+    const u = this.usuarios[indice];
+    this.usuarios[indice] = Usuario.reconstituir({
+      id: u.id,
+      nombre: u.nombre,
+      correo: u.correo,
+      telefono: u.telefono,
+      hashClave: u.hashClave,
+      rol: u.rol,
+      activo,
+      privacidadAceptadaEn: u.privacidadAceptadaEn,
+      versionPrivacidad: u.versionPrivacidad,
+      correoVerificadoEn: u.correoVerificadoEn,
+      creadoEn: u.creadoEn,
+      actualizadoEn: ahora,
+    });
+    return Promise.resolve(true);
+  }
+
   listarClientes(
     busqueda: BusquedaClientes | null,
     paginacion: Paginacion,
+    activo?: boolean,
   ): Promise<PaginaUsuarios> {
     const coincide = (u: Usuario): boolean => {
       if (busqueda === null) {
@@ -185,7 +213,12 @@ export class UsuarioRepositorioEnMemoria implements UsuarioRepositorio {
       );
     };
     const clientes = this.usuarios
-      .filter((u) => u.esCliente() && coincide(u))
+      .filter(
+        (u) =>
+          u.esCliente() &&
+          (activo === undefined || u.activo === activo) &&
+          coincide(u),
+      )
       .toSorted((a, b) => b.creadoEn.getTime() - a.creadoEn.getTime());
     const inicio = (paginacion.pagina - 1) * paginacion.tamanio;
     return Promise.resolve({

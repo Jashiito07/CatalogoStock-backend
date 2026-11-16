@@ -116,6 +116,7 @@ describe('RF-USU-02: entidad Usuario', () => {
         correo: 'maria.zambrano@correo.com',
         telefono: '+593991234567',
         rol: 'VENDEDOR',
+        activo: true,
         privacidadAceptadaEn: null,
         versionPrivacidad: null,
         correoVerificadoEn: null,

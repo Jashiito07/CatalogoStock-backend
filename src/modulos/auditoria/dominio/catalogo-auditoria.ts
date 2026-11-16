@@ -22,6 +22,10 @@ export const ACCIONES_AUDITORIA = [
   'CORREO_VERIFICADO',
   'CODIGO_CORREO_ENVIADO',
   'SOLICITUD_RECUPERACION_IGNORADA',
+  // Gestión de clientes (contrato usuarios-gestion, D-53): desactivar y
+  // reactivar. Migración AgregarAccionesClienteEstadoAuditoria.
+  'CLIENTE_DESACTIVADO',
+  'CLIENTE_REACTIVADO',
   // F2: marcas, productos e imágenes (contrato de productos). Migración
   // AgregarAccionesCatalogoAuditoria.
   'MARCA_CREADA',
@@ -71,6 +75,8 @@ export const ENTIDAD_DE_LA_ACCION: Readonly<
   CORREO_VERIFICADO: 'USUARIO',
   CODIGO_CORREO_ENVIADO: 'USUARIO',
   SOLICITUD_RECUPERACION_IGNORADA: 'USUARIO',
+  CLIENTE_DESACTIVADO: 'USUARIO',
+  CLIENTE_REACTIVADO: 'USUARIO',
   MARCA_CREADA: 'MARCA',
   MARCA_ACTUALIZADA: 'MARCA',
   PRODUCTO_CREADO: 'PRODUCTO',

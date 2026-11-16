@@ -42,12 +42,25 @@ export interface UsuarioRepositorio {
    */
   marcarCorreoVerificado(idUsuario: string, ahora: Date): Promise<void>;
   /**
+   * Cambia `activo` (D-53) solo si el valor es distinto, de forma atómica
+   * (`UPDATE . WHERE activo <> :activo`), dentro de la transacción en curso
+   * si la hay. Devuelve `true` si cambió la fila y `false` si ya tenía ese
+   * valor (o no existe): así dos solicitudes simultáneas registran una sola vez.
+   */
+  actualizarActivo(
+    idUsuario: string,
+    activo: boolean,
+    ahora: Date,
+  ): Promise<boolean>;
+  /**
    * Solo usuarios con rol `CLIENTE`, del más reciente al más antiguo, con la
-   * búsqueda sin mayúsculas ni tildes en nombre, correo y teléfono.
+   * búsqueda sin mayúsculas ni tildes en nombre, correo y teléfono y, si se
+   * indica `activo`, solo los de ese estado (D-53).
    */
   listarClientes(
     busqueda: BusquedaClientes | null,
     paginacion: Paginacion,
+    activo?: boolean,
   ): Promise<PaginaUsuarios>;
 }
 
