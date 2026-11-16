@@ -34,10 +34,12 @@ export class ListarClientesCasoUso {
   async ejecutar(
     busqueda: string | undefined,
     paginacion: Paginacion,
+    activo?: boolean,
   ): Promise<Pagina<ResumenCliente>> {
     const { usuarios, total } = await this.usuarios.listarClientes(
       crearBusquedaClientes(busqueda),
       paginacion,
+      activo,
     );
     const vencimientos = await this.codigos.vencimientosVigentes(
       usuarios.map((usuario) => usuario.id),

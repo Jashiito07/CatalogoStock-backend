@@ -130,6 +130,20 @@ export class UsuarioRepositorioTypeorm implements UsuarioRepositorio {
     );
   }
 
+  async actualizarActivo(
+    idUsuario: string,
+    activo: boolean,
+    ahora: Date,
+  ): Promise<boolean> {
+    const resultado = await this.filas
+      .createQueryBuilder()
+      .update(UsuarioOrmEntity)
+      .set({ activo, fechaActualizacion: ahora })
+      .where('id = :idUsuario AND activo <> :activo', { idUsuario, activo })
+      .execute();
+    return (resultado.affected ?? 0) > 0;
+  }
+
   /**
    * Búsqueda sin mayúsculas ni tildes con `translate(lower(…))` y la misma
    * tabla de letras que el dominio (sin la extensión `unaccent`). Los
@@ -138,10 +152,15 @@ export class UsuarioRepositorioTypeorm implements UsuarioRepositorio {
   async listarClientes(
     busqueda: BusquedaClientes | null,
     paginacion: Paginacion,
+    activo?: boolean,
   ): Promise<PaginaUsuarios> {
     const consulta = this.filas
       .createQueryBuilder('u')
       .where('u.rol = :rol', { rol: 'CLIENTE' });
+
+    if (activo !== undefined) {
+      consulta.andWhere('u.activo = :activo', { activo });
+    }
 
     if (busqueda !== null) {
       const condiciones = [

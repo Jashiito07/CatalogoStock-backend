@@ -41,6 +41,9 @@ describe('Migración del correo (e2e): esquema, reversión y reaplicación', () 
     // Con acciones nuevas en la bitácora la reversión se niega (nunca borra la
     // bitácora): la base de pruebas se vacía antes.
     await contexto.limpiar();
+    // Primero se revierte la migración posterior (acciones de clientes, D-53)
+    // y después la del correo.
+    await contexto.fuente.undoLastMigration({ transaction: 'each' });
     await contexto.fuente.undoLastMigration({ transaction: 'each' });
     expect(await columnas('usuarios')).not.toContain('correo_verificado_en');
     expect(await columnas('codigos_recuperacion')).not.toContain('proposito');

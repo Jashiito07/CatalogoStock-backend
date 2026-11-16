@@ -45,6 +45,8 @@ export interface UsuarioPublico {
   correo: string;
   telefono: string;
   rol: Rol;
+  /** `false`: cuenta desactivada por el Vendedor (D-53); no puede ingresar. */
+  activo: boolean;
   privacidadAceptadaEn: Date | null;
   versionPrivacidad: string | null;
   correoVerificadoEn: Date | null;
@@ -196,6 +198,7 @@ export class Usuario {
       correo: this.correo.valor,
       telefono: this.telefono.valor,
       rol: this.rol,
+      activo: this.activo,
       privacidadAceptadaEn: this.privacidadAceptadaEn,
       versionPrivacidad: this.versionPrivacidad,
       correoVerificadoEn: this.correoVerificadoEn,

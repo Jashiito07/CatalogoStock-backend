@@ -411,7 +411,7 @@ describe('Subfase 1.5 (e2e): bitácora de actividades (RF-USU-04)', () => {
           detalle: {
             correo: 'nadie@ejemplo.test',
             canal: 'PANEL',
-            motivo: 'CREDENCIALES_INVALIDAS',
+            motivo: 'CORREO_NO_REGISTRADO',
           },
         }),
       ]);
@@ -711,7 +711,7 @@ describe('Subfase 1.5 (e2e): bitácora de actividades (RF-USU-04)', () => {
       expect(fallida.detalle).toEqual({
         correo: 'nadie@ejemplo.test',
         canal: 'APP',
-        motivo: 'CREDENCIALES_INVALIDAS',
+        motivo: 'CORREO_NO_REGISTRADO',
       });
       expect(pagina.elementos.at(-1)?.usuario).toEqual({
         id: vendedor.usuario.id,

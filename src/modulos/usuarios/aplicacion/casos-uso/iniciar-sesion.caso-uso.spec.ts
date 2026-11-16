@@ -1,4 +1,8 @@
-import { CredencialesInvalidasError } from '../../dominio/errores-autenticacion.js';
+import {
+  CorreoNoRegistradoError,
+  CredencialesInvalidasError,
+  CuentaDesactivadaError,
+} from '../../dominio/errores-autenticacion.js';
 import type { Canal } from '../../dominio/canal.js';
 import {
   AuditoriaFalsa,
@@ -65,6 +69,15 @@ async function motivoDelFallo(promesa: Promise<unknown>): Promise<string> {
   // El motivo nunca va en los detalles de la respuesta.
   expect((error as CredencialesInvalidasError).detalles).toBeUndefined();
   return (error as CredencialesInvalidasError).motivo;
+}
+
+async function errorDelFallo(promesa: Promise<unknown>): Promise<unknown> {
+  return promesa.then(
+    () => {
+      throw new Error('se esperaba un fallo');
+    },
+    (e: unknown) => e,
+  );
 }
 
 describe('RF-USU-01 / CA-01 / D-19: IniciarSesionCasoUso', () => {
@@ -144,10 +157,10 @@ describe('RF-USU-01 / CA-01 / D-19: IniciarSesionCasoUso', () => {
     expect(sesiones.sesiones).toHaveLength(0);
   });
 
-  it('CA-01: correo inexistente → mismo error y también compara contra un hash ficticio', async () => {
+  it('D-52: correo inexistente en APP -> 401 CORREO_NO_REGISTRADO, compara contra un hash ficticio y no crea sesion', async () => {
     const { sesiones, hash, casoUso } = preparar();
 
-    const motivo = await motivoDelFallo(
+    const error = await errorDelFallo(
       casoUso.ejecutar({
         canal: 'APP',
         correo: 'nadie@ejemplo.test',
@@ -155,9 +168,53 @@ describe('RF-USU-01 / CA-01 / D-19: IniciarSesionCasoUso', () => {
       }),
     );
 
-    expect(motivo).toBe('CREDENCIALES_INVALIDAS');
+    expect(error).toBeInstanceOf(CorreoNoRegistradoError);
+    expect(error).toMatchObject({
+      codigo: 'CORREO_NO_REGISTRADO',
+      message: 'No existe una cuenta registrada con ese correo.',
+      categoria: 'NO_AUTENTICADO',
+    });
     expect(hash.comparaciones).toBe(1);
     expect(sesiones.sesiones).toHaveLength(0);
+  });
+
+  it('D-52: correo inexistente en PANEL -> el 401 generico (el panel no cambia), motivo CORREO_NO_REGISTRADO solo en la bitacora', async () => {
+    const { auditoria, hash, casoUso } = preparar();
+
+    const motivo = await motivoDelFallo(
+      casoUso.ejecutar({
+        canal: 'PANEL',
+        correo: 'nadie@ejemplo.test',
+        clave: CLAVE_VALIDA,
+      }),
+    );
+
+    expect(motivo).toBe('CORREO_NO_REGISTRADO');
+    expect(hash.comparaciones).toBe(1);
+    expect(auditoria.registradas[0].actividad.detalle).toMatchObject({
+      canal: 'PANEL',
+      motivo: 'CORREO_NO_REGISTRADO',
+    });
+  });
+
+  it('D-52: el tiempo no distingue los casos: una comparacion bcrypt tambien con cuenta existente, inactiva o de otro rol', async () => {
+    const { usuarios, hash, casoUso } = preparar();
+    usuarios.usuarios.push(
+      desactivar(crearCliente('id-inactivo', 'inactivo@ejemplo.test')),
+    );
+    const intentos = [
+      ['APP', CORREO_CLIENTE, 'Otra2026'],
+      ['APP', CORREO_VENDEDOR, CLAVE_VALIDA],
+      ['APP', 'inactivo@ejemplo.test', CLAVE_VALIDA],
+      ['APP', 'nadie@ejemplo.test', CLAVE_VALIDA],
+      ['PANEL', 'nadie@ejemplo.test', CLAVE_VALIDA],
+    ] as const;
+
+    for (const [canal, correo, clave] of intentos) {
+      const antes = hash.comparaciones;
+      await casoUso.ejecutar({ canal, correo, clave }).catch(() => undefined);
+      expect(hash.comparaciones - antes).toBe(1);
+    }
   });
 
   it('el hash ficticio se calcula una sola vez', async () => {
@@ -175,18 +232,40 @@ describe('RF-USU-01 / CA-01 / D-19: IniciarSesionCasoUso', () => {
     expect(hash.comparaciones).toBe(2);
   });
 
-  it('un correo con formato inválido responde lo mismo que uno inexistente', async () => {
+  it('un correo con formato invalido se trata como inexistente (CORREO_NO_REGISTRADO en APP)', async () => {
     const { casoUso } = preparar();
 
     await expect(
-      motivoDelFallo(
+      errorDelFallo(
         casoUso.ejecutar({ canal: 'APP', correo: 'no es correo', clave: 'x' }),
       ),
-    ).resolves.toBe('CREDENCIALES_INVALIDAS');
+    ).resolves.toBeInstanceOf(CorreoNoRegistradoError);
   });
 
-  it('una cuenta inactiva no inicia sesión aunque la clave sea correcta', async () => {
-    const { usuarios, sesiones, casoUso } = preparar();
+  it('D-52: cuenta desactivada con clave correcta en APP -> 403 CUENTA_DESACTIVADA sin sesion', async () => {
+    const { usuarios, sesiones, emisor, casoUso } = preparar();
+    usuarios.usuarios[0] = desactivar(usuarios.usuarios[0]);
+
+    const error = await errorDelFallo(
+      casoUso.ejecutar({
+        canal: 'APP',
+        correo: CORREO_CLIENTE,
+        clave: CLAVE_VALIDA,
+      }),
+    );
+
+    expect(error).toBeInstanceOf(CuentaDesactivadaError);
+    expect(error).toMatchObject({
+      codigo: 'CUENTA_DESACTIVADA',
+      message: 'Tu cuenta está desactivada. Contacta a tu vendedor.',
+      categoria: 'NO_AUTORIZADO',
+    });
+    expect(sesiones.sesiones).toHaveLength(0);
+    expect(emisor.emitidos).toHaveLength(0);
+  });
+
+  it('D-52: cuenta desactivada con clave incorrecta en APP -> 401 generico (no revela el estado sin la clave)', async () => {
+    const { usuarios, auditoria, casoUso } = preparar();
     usuarios.usuarios[0] = desactivar(usuarios.usuarios[0]);
 
     await expect(
@@ -194,11 +273,56 @@ describe('RF-USU-01 / CA-01 / D-19: IniciarSesionCasoUso', () => {
         casoUso.ejecutar({
           canal: 'APP',
           correo: CORREO_CLIENTE,
-          clave: CLAVE_VALIDA,
+          clave: 'Otra2026',
         }),
       ),
     ).resolves.toBe('CREDENCIALES_INVALIDAS');
-    expect(sesiones.sesiones).toHaveLength(0);
+    expect(auditoria.registradas[0].actividad.detalle).toMatchObject({
+      motivo: 'CREDENCIALES_INVALIDAS',
+    });
+  });
+
+  it('D-52: SESION_FALLIDA con motivo CUENTA_DESACTIVADA, el correo intentado y el id de la cuenta', async () => {
+    const { usuarios, auditoria, casoUso } = preparar();
+    usuarios.usuarios[0] = desactivar(usuarios.usuarios[0]);
+
+    await errorDelFallo(
+      casoUso.ejecutar({
+        canal: 'APP',
+        correo: CORREO_CLIENTE,
+        clave: CLAVE_VALIDA,
+      }),
+    );
+
+    expect(auditoria.registradas).toHaveLength(1);
+    expect(auditoria.registradas[0]).toMatchObject({
+      sinInterrumpir: true,
+      enTransaccion: false,
+      actividad: {
+        accion: 'SESION_FALLIDA',
+        idUsuario: 'id-cliente',
+        detalle: {
+          correo: CORREO_CLIENTE,
+          canal: 'APP',
+          motivo: 'CUENTA_DESACTIVADA',
+        },
+      },
+    });
+  });
+
+  it('D-52: un Cliente (activo o no) en PANEL sigue con el 401 generico y motivo ROL_NO_PERMITIDO (el panel no cambia)', async () => {
+    const { usuarios, casoUso } = preparar();
+    usuarios.usuarios[0] = desactivar(usuarios.usuarios[0]);
+
+    await expect(
+      motivoDelFallo(
+        casoUso.ejecutar({
+          canal: 'PANEL',
+          correo: CORREO_CLIENTE,
+          clave: CLAVE_VALIDA,
+        }),
+      ),
+    ).resolves.toBe('ROL_NO_PERMITIDO');
   });
 
   it('D-22: una clave de más de 72 bytes nunca es válida (bcrypt ignoraría el resto)', async () => {
@@ -327,10 +451,10 @@ describe('RF-USU-01 / CA-01 / D-19: IniciarSesionCasoUso', () => {
       );
     });
 
-    it('D-20: correo inexistente → SESION_FALLIDA sin usuario (idUsuario null)', async () => {
+    it('D-20 / D-52: correo inexistente -> SESION_FALLIDA con motivo CORREO_NO_REGISTRADO y sin usuario (idUsuario null); el correo intentado se conserva', async () => {
       const { auditoria, casoUso } = preparar();
 
-      await motivoDelFallo(
+      await errorDelFallo(
         casoUso.ejecutar({
           canal: 'APP',
           correo: 'nadie@ejemplo.test',
@@ -343,7 +467,7 @@ describe('RF-USU-01 / CA-01 / D-19: IniciarSesionCasoUso', () => {
         idUsuario: null,
         detalle: {
           correo: 'nadie@ejemplo.test',
-          motivo: 'CREDENCIALES_INVALIDAS',
+          motivo: 'CORREO_NO_REGISTRADO',
         },
       });
     });

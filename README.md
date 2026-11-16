@@ -124,7 +124,10 @@ Migraciones actuales: `CrearTablaUsuarios` (1.2), `CrearTablaSesiones` (1.3),
 `CrearTablaAuditoria` (1.5), `AgregarAccionesRecuperacionAuditoria` y
 `CrearTablaCodigosRecuperacion` (RF-USU-05), `CrearTablaMarcas` y
 `AgregarAccionesCatalogoAuditoria` (2.2: acciones y entidades de marcas, productos e imágenes),
-`CrearTablaProductos` (2.3) y `CrearTablaImagenesProducto` (2.4).
+`CrearTablaProductos` (2.3), `CrearTablaImagenesProducto` (2.4),
+`AgregarCorreoVerificadoYPropositoCodigos` (correo, D-50) y
+`AgregarAccionesClienteEstadoAuditoria` (acciones `CLIENTE_DESACTIVADO` y
+`CLIENTE_REACTIVADO`, D-53).
 
 ## Marcas (RF-PRO-04, RF-PRO-06, RF-CAT-05, D-43, D-48)
 
@@ -194,7 +197,8 @@ Contrato completo en `docs/contrato-api/recuperacion-clave.md`.
 
 | Ruta | Acceso | Límite por IP (D-17) |
 |---|---|---|
-| `GET /api/v1/usuarios` | Vendedor; solo Clientes, paginado, `busqueda` sin mayúsculas ni tildes | — |
+| `GET /api/v1/usuarios` | Vendedor; solo Clientes, paginado, `busqueda` sin mayúsculas ni tildes, `activo=true\|false` | - |
+| `PATCH /api/v1/usuarios/{id}/estado` | Vendedor; `{ "activo": false \| true }` desactiva (revoca sus sesiones) o reactiva a un Cliente; 200 con el Usuario (`activo`), idempotente · 404 `USUARIO_NO_ENCONTRADO` · 422 `OPERACION_NO_PERMITIDA` (el Vendedor). Bitácora: `CLIENTE_DESACTIVADO` / `CLIENTE_REACTIVADO` con `{ idUsuario }` (D-53) | - |
 | `POST /api/v1/usuarios/{id}/codigo-recuperacion` | Vendedor; 201 con el código (única vez que viaja) | — |
 | `POST /api/v1/autenticacion/recuperacion` | Público; correo + código + clave nueva → 204 | 5 por minuto |
 | `POST /api/v1/usuarios/yo/clave` | Autenticado (Cliente o Vendedor) → 204 | 5 por minuto |
@@ -283,6 +287,14 @@ Contrato completo en `docs/contrato-api/usuarios.md` (RF-USU-01, CA-01, D-09, D-
 - Reutilizar un token ya rotado revoca toda su familia (401 `TOKEN_INVALIDO`).
 - Con el rol equivocado en un canal, la respuesta es la misma que con una clave incorrecta
   (401 `CREDENCIALES_INVALIDAS`) y no se crea sesión.
+- Mensajes del ingreso de la app (`/ingreso/cliente`, D-52; contrato
+  `docs/contrato-api/usuarios-gestion.md`): correo sin cuenta → 401 `CORREO_NO_REGISTRADO`;
+  cuenta de Cliente desactivada **con la clave correcta** → 403 `CUENTA_DESACTIVADA`; clave
+  incorrecta o cuenta de Vendedor → 401 `CREDENCIALES_INVALIDAS`. `/ingreso/vendedor`
+  (panel) no cambia: siempre el 401 genérico. El tiempo de respuesta no distingue los casos
+  (siempre una comparación bcrypt, con un hash ficticio si no hay cuenta). La bitácora
+  guarda el motivo en `SESION_FALLIDA`: `CORREO_NO_REGISTRADO`, `CREDENCIALES_INVALIDAS`,
+  `ROL_NO_PERMITIDO` o `CUENTA_DESACTIVADA`.
 - Al superar un límite: 429 `DEMASIADAS_SOLICITUDES` con la cabecera `Retry-After`. El
   contador vive en la memoria del proceso.
 - El aviso de privacidad es un **borrador provisional** (D-15) en

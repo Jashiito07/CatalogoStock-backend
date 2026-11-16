@@ -5,8 +5,11 @@ import type { ServicioAuditoria } from '../../../auditoria/index.js';
 import { type Canal, rolPermitidoEnCanal } from '../../dominio/canal.js';
 import { BYTES_MAXIMOS_CLAVE, bytesUtf8 } from '../../dominio/clave.js';
 import { Correo } from '../../dominio/correo.js';
+import type { ErrorDominio } from '../../../../compartido/dominio/errores.js';
 import {
+  CorreoNoRegistradoError,
   CredencialesInvalidasError,
+  CuentaDesactivadaError,
   type MotivoIngresoFallido,
 } from '../../dominio/errores-autenticacion.js';
 import { Sesion } from '../../dominio/sesion.js';
@@ -41,6 +44,13 @@ const CLAVE_FICTICIA = 'clave-ficticia-solo-para-igualar-tiempos-0';
  *   equivocado **no se crea ninguna sesión** y se responde lo mismo que con
  *   una clave incorrecta (401 `CREDENCIALES_INVALIDAS`, «Correo o clave
  *   incorrectos.»), para no revelar que la cuenta existe.
+ * - D-52 (mensajes claros solo en la app, sin cambios en el panel):
+ *   `/ingreso/cliente` responde 401 `CORREO_NO_REGISTRADO` si el correo no
+ *   tiene cuenta y 403 `CUENTA_DESACTIVADA` si la cuenta de Cliente está
+ *   desactivada **y la clave es correcta**; con clave incorrecta, o con una
+ *   cuenta de Vendedor, sigue el 401 genérico. `/ingreso/vendedor` siempre
+ *   responde el 401 genérico. El tiempo no distingue los casos: siempre hay
+ *   una comparación bcrypt.
  * - Primero se verifica la clave y después el rol (contrato de usuarios).
  * - Si el correo no existe se compara contra un hash ficticio, para que el
  *   tiempo de respuesta sea similar al de una clave incorrecta.
@@ -70,12 +80,21 @@ export class IniciarSesionCasoUso {
     const usuario = await this.buscarUsuario(datos.correo);
     const claveValida = await this.compararClave(datos.clave, usuario);
 
-    if (usuario === null || !claveValida || !usuario.activo) {
+    if (usuario === null) {
+      // D-52: solo la app distingue «sin cuenta»; el panel responde el 401 genérico.
+      throw await this.rechazar(datos, null, 'CORREO_NO_REGISTRADO');
+    }
+    if (!claveValida) {
       throw await this.rechazar(datos, usuario, 'CREDENCIALES_INVALIDAS');
     }
     if (!rolPermitidoEnCanal(usuario.rol, datos.canal)) {
-      // D-19: rol equivocado en el canal → mismo 401 y sin sesión.
+      // D-19: rol equivocado en el canal: mismo 401 y sin sesión. Se
+      // comprueba antes que el estado para no revelar el rol ni el estado.
       throw await this.rechazar(datos, usuario, 'ROL_NO_PERMITIDO');
+    }
+    if (!usuario.activo) {
+      // D-52, D-53: con la clave correcta, la app explica que la cuenta está desactivada.
+      throw await this.rechazar(datos, usuario, 'CUENTA_DESACTIVADA');
     }
 
     const ahora = this.reloj.ahora();
@@ -119,7 +138,7 @@ export class IniciarSesionCasoUso {
     datos: DatosIniciarSesion,
     usuario: Usuario | null,
     motivo: MotivoIngresoFallido,
-  ): Promise<CredencialesInvalidasError> {
+  ): Promise<ErrorDominio> {
     await this.auditoria.registrarSinInterrumpir({
       accion: 'SESION_FALLIDA',
       idUsuario: usuario?.id ?? null,
@@ -127,6 +146,24 @@ export class IniciarSesionCasoUso {
       idEntidad: null,
       detalle: { correo: datos.correo, canal: datos.canal, motivo },
     });
+    return this.errorParaCanal(datos.canal, motivo);
+  }
+
+  /**
+   * D-52: el canal `APP` explica «sin cuenta» (401 `CORREO_NO_REGISTRADO`) y
+   * «cuenta desactivada» (403 `CUENTA_DESACTIVADA`, solo con la clave
+   * correcta). Todo lo demás, y siempre el canal `PANEL`, es el 401 genérico.
+   */
+  private errorParaCanal(
+    canal: Canal,
+    motivo: MotivoIngresoFallido,
+  ): ErrorDominio {
+    if (canal === 'APP' && motivo === 'CORREO_NO_REGISTRADO') {
+      return new CorreoNoRegistradoError();
+    }
+    if (canal === 'APP' && motivo === 'CUENTA_DESACTIVADA') {
+      return new CuentaDesactivadaError();
+    }
     return new CredencialesInvalidasError(motivo);
   }
 

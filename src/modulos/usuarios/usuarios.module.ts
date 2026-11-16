@@ -21,6 +21,7 @@ import {
   type ServicioAuditoria,
 } from '../auditoria/index.js';
 import { CambiarClaveCasoUso } from './aplicacion/casos-uso/cambiar-clave.caso-uso.js';
+import { CambiarEstadoUsuarioCasoUso } from './aplicacion/casos-uso/cambiar-estado-usuario.caso-uso.js';
 import { CerrarSesionCasoUso } from './aplicacion/casos-uso/cerrar-sesion.caso-uso.js';
 import { ConfirmarCorreoCasoUso } from './aplicacion/casos-uso/confirmar-correo.caso-uso.js';
 import { SolicitarRecuperacionPorCorreoCasoUso } from './aplicacion/casos-uso/solicitar-recuperacion-por-correo.caso-uso.js';
@@ -570,6 +571,31 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
           sesiones,
           generadorHash,
           generadorToken,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
+    },
+    // Contrato usuarios-gestion (D-53): desactivar y reactivar clientes.
+    {
+      provide: CambiarEstadoUsuarioCasoUso,
+      inject: [
+        USUARIO_REPOSITORIO,
+        SESION_REPOSITORIO,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        sesiones: SesionRepositorio,
+        reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
+      ) =>
+        new CambiarEstadoUsuarioCasoUso(
+          usuarios,
+          sesiones,
           reloj,
           unidadTrabajo,
           auditoria,

@@ -137,6 +137,7 @@ describe('Subfase 1.3 (e2e): registro, inicio de sesión y tokens', () => {
       const respuesta = await registrar().expect(201);
 
       expect(Object.keys(respuesta.body as object).toSorted()).toEqual([
+        'activo',
         'correo',
         'correoVerificadoEn',
         'creadoEn',
@@ -308,7 +309,7 @@ describe('Subfase 1.3 (e2e): registro, inicio de sesión y tokens', () => {
       expect(filas[0].hash_token).not.toBe(sesion.tokenRenovacion);
     });
 
-    it('Cuando la clave es incorrecta o el correo no existe, entonces recibe el mismo 401 y no se crea sesión', async () => {
+    it('Cuando la clave es incorrecta o el correo no existe, entonces recibe un 401 y no se crea sesión', async () => {
       await registrar().expect(201);
 
       const claveMala = await ingresar(
@@ -323,7 +324,12 @@ describe('Subfase 1.3 (e2e): registro, inicio de sesión y tokens', () => {
       ).expect(401);
 
       expect(claveMala.body).toEqual(CREDENCIALES_INVALIDAS);
-      expect(correoInexistente.body).toEqual(CREDENCIALES_INVALIDAS);
+      // D-52: la app distingue «sin cuenta» (el panel no, ver usuarios-gestion.e2e-spec).
+      expect(correoInexistente.body).toEqual({
+        codigo: 'CORREO_NO_REGISTRADO',
+        mensaje: 'No existe una cuenta registrada con ese correo.',
+        detalles: {},
+      });
       expect(await contar('sesiones')).toBe(0);
     });
 

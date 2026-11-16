@@ -13,6 +13,8 @@ export interface RespuestaUsuario {
   correo: string;
   telefono: string;
   rol: Rol;
+  /** `false` si el Vendedor desactivó la cuenta (D-53). */
+  activo: boolean;
   privacidadAceptadaEn: string | null;
   versionPrivacidad: string | null;
   /** Cuándo se verificó el correo; `null` si falta (la app avisa «Verifica tu correo»). */
@@ -98,6 +100,7 @@ export function aRespuestaUsuario(usuario: UsuarioPublico): RespuestaUsuario {
     correo: usuario.correo,
     telefono: usuario.telefono,
     rol: usuario.rol,
+    activo: usuario.activo,
     privacidadAceptadaEn: usuario.privacidadAceptadaEn?.toISOString() ?? null,
     versionPrivacidad: usuario.versionPrivacidad,
     correoVerificadoEn: usuario.correoVerificadoEn?.toISOString() ?? null,

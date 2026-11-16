@@ -107,6 +107,7 @@ describe('RF-USU-01 / CA-01 / D-07 / D-11: RegistrarClienteCasoUso', () => {
       correo: 'maria.zambrano@correo.com',
       telefono: '+593991234567',
       rol: 'CLIENTE',
+      activo: true,
       privacidadAceptadaEn: INICIO,
       versionPrivacidad: '2026-11-1',
       correoVerificadoEn: null,
