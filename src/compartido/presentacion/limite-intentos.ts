@@ -37,6 +37,9 @@ export const GRUPOS_LIMITE_INTENTOS = {
   // RF-PRO-01 (contrato de productos, imágenes): 30 subidas por minuto. Se
   // cuenta por IP, como los demás grupos (el guard corre antes de la sesión).
   SUBIDA_IMAGENES: { limite: 30, ventanaMs: 60_000 },
+  // RF-PRO-01 (contrato de importación, D-49): 5 análisis de catálogo en PDF por
+  // hora y por IP (D-17); es un trabajo pesado.
+  IMPORTACION_PDF: { limite: 5, ventanaMs: 3_600_000 },
 } as const;
 
 export type GrupoLimiteIntentos = keyof typeof GRUPOS_LIMITE_INTENTOS;

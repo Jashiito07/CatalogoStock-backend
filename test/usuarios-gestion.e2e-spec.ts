@@ -54,6 +54,15 @@ interface FilaAuditoria {
 }
 
 /** `{ id: activo }` de los elementos de una página de `GET /usuarios`. */
+/** Mapa id → correoVerificadoEn de una página de la lista de clientes. */
+function verificacion(cuerpo: {
+  elementos: { id: string; correoVerificadoEn: string | null }[];
+}): Record<string, string | null> {
+  return Object.fromEntries(
+    cuerpo.elementos.map((e) => [e.id, e.correoVerificadoEn]),
+  );
+}
+
 function estado(cuerpo: {
   elementos: { id: string; activo: boolean }[];
 }): Record<string, boolean> {
@@ -547,6 +556,73 @@ describe('Usuarios, gestión (e2e): mensajes de ingreso y estado de los clientes
       expect(activos.body.total).toBe(1);
       expect(estado(inactivos.body)).toEqual({ [idMaria]: false });
       expect(inactivos.body.total).toBe(1);
+    });
+
+    it('RF-USU-05: la lista incluye correoVerificadoEn (fecha ISO o null) y ?correoVerificado=true|false filtra; total respeta el filtro y se combina con ?activo', async () => {
+      const vendedor = await sesionVendedor();
+      await contexto.fuente.query(
+        'UPDATE usuarios SET correo_verificado_en = $2 WHERE id = $1',
+        [idLuis, '2026-11-10T15:30:00.000Z'],
+      );
+      const lista = (consulta: string) =>
+        http()
+          .get(`/api/v1/usuarios${consulta}`)
+          .set('Authorization', `Bearer ${vendedor.tokenAcceso}`);
+
+      const todos = await lista('').expect(200);
+      const verificados = await lista('?correoVerificado=true').expect(200);
+      const sinVerificar = await lista('?correoVerificado=false').expect(200);
+
+      expect(verificacion(todos.body)).toEqual({
+        [idLuis]: '2026-11-10T15:30:00.000Z',
+        [idMaria]: null,
+      });
+      expect(verificacion(verificados.body)).toEqual({
+        [idLuis]: '2026-11-10T15:30:00.000Z',
+      });
+      expect(verificados.body.total).toBe(1);
+      expect(verificacion(sinVerificar.body)).toEqual({ [idMaria]: null });
+      expect(sinVerificar.body.total).toBe(1);
+      // `total` respeta el filtro aunque la página sea de un solo elemento.
+      const conteo = await lista('?correoVerificado=false&tamanio=1').expect(200);
+      expect(conteo.body).toMatchObject({ tamanio: 1, total: 1 });
+      // No se expone nada del proceso de verificación.
+      expect(JSON.stringify(todos.body)).not.toMatch(/codigo(Correo|Verificacion)/i);
+
+      await cambiarEstado(vendedor.tokenAcceso, idMaria, {
+        activo: false,
+      }).expect(200);
+      const combinado = await lista(
+        '?correoVerificado=false&activo=false',
+      ).expect(200);
+      expect(verificacion(combinado.body)).toEqual({ [idMaria]: null });
+      const vacio = await lista('?correoVerificado=true&activo=false').expect(200);
+      expect(vacio.body).toMatchObject({ elementos: [], total: 0 });
+    });
+
+    it('?correoVerificado con un valor que no es true ni false → 400 DATOS_INVALIDOS', async () => {
+      const vendedor = await sesionVendedor();
+
+      for (const valor of ['1', 'si', 'TRUE', '']) {
+        const respuesta = await http()
+          .get(`/api/v1/usuarios?correoVerificado=${valor}`)
+          .set('Authorization', `Bearer ${vendedor.tokenAcceso}`)
+          .expect(400);
+        expect(respuesta.body.codigo).toBe('DATOS_INVALIDOS');
+      }
+    });
+
+    it('CA-02: el Cliente llama GET /usuarios con ?correoVerificado → 403 NO_AUTORIZADO y queda ACCESO_DENEGADO', async () => {
+      const luis = await sesion('cliente', CORREO_LUIS, CLAVE);
+      const antes = (await auditoria('ACCESO_DENEGADO')).length;
+
+      const respuesta = await http()
+        .get('/api/v1/usuarios?correoVerificado=false')
+        .set('Authorization', `Bearer ${luis.tokenAcceso}`)
+        .expect(403);
+
+      expect(respuesta.body.codigo).toBe('NO_AUTORIZADO');
+      expect((await auditoria('ACCESO_DENEGADO')).length).toBe(antes + 1);
     });
 
     it('?activo con un valor que no es true ni false → 400 DATOS_INVALIDOS', async () => {

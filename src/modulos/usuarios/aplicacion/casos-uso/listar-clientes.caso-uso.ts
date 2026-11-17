@@ -14,6 +14,8 @@ export interface ResumenCliente {
   correo: string;
   telefono: string;
   activo: boolean;
+  /** Cuándo confirmó su correo (RF-USU-05) o `null` si aún no; nunca datos del proceso. */
+  correoVerificadoEn: Date | null;
   creadoEn: Date;
   /** Vencimiento del código vigente; nunca el código. */
   codigoRecuperacionVigenteHasta: Date | null;
@@ -35,11 +37,13 @@ export class ListarClientesCasoUso {
     busqueda: string | undefined,
     paginacion: Paginacion,
     activo?: boolean,
+    correoVerificado?: boolean,
   ): Promise<Pagina<ResumenCliente>> {
     const { usuarios, total } = await this.usuarios.listarClientes(
       crearBusquedaClientes(busqueda),
       paginacion,
       activo,
+      correoVerificado,
     );
     const vencimientos = await this.codigos.vencimientosVigentes(
       usuarios.map((usuario) => usuario.id),
@@ -52,6 +56,7 @@ export class ListarClientesCasoUso {
         correo: usuario.correo.valor,
         telefono: usuario.telefono.valor,
         activo: usuario.activo,
+        correoVerificadoEn: usuario.correoVerificadoEn,
         creadoEn: usuario.creadoEn,
         codigoRecuperacionVigenteHasta: vencimientos.get(usuario.id) ?? null,
       })),

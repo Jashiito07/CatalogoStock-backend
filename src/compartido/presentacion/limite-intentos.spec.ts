@@ -47,6 +47,7 @@ describe('D-17: límite de intentos por IP', () => {
       SOLICITUD_CODIGO_CORREO: { limite: 3, ventanaMs: 60_000 },
       CONFIRMACION_CORREO: { limite: 5, ventanaMs: 60_000 },
       SUBIDA_IMAGENES: { limite: 30, ventanaMs: 60_000 },
+      IMPORTACION_PDF: { limite: 5, ventanaMs: 3_600_000 },
     });
     expect(limitador('SOLICITUD_CODIGO_CORREO')).toMatchObject({
       limit: 3,
@@ -62,6 +63,11 @@ describe('D-17: límite de intentos por IP', () => {
     expect(limitador('SUBIDA_IMAGENES')).toMatchObject({
       limit: 30,
       ttl: 60_000,
+    });
+    // Contrato de importación (D-17): 5 análisis de PDF por hora.
+    expect(limitador('IMPORTACION_PDF')).toMatchObject({
+      limit: 5,
+      ttl: 3_600_000,
     });
   });
 

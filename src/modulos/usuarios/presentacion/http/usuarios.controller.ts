@@ -114,6 +114,7 @@ export class UsuariosController {
         consulta.busqueda,
         paginacionDe(consulta),
         consulta.activo,
+        consulta.correoVerificado,
       ),
     );
   }

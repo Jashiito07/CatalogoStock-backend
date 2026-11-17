@@ -153,6 +153,7 @@ export class UsuarioRepositorioTypeorm implements UsuarioRepositorio {
     busqueda: BusquedaClientes | null,
     paginacion: Paginacion,
     activo?: boolean,
+    correoVerificado?: boolean,
   ): Promise<PaginaUsuarios> {
     const consulta = this.filas
       .createQueryBuilder('u')
@@ -160,6 +161,11 @@ export class UsuarioRepositorioTypeorm implements UsuarioRepositorio {
 
     if (activo !== undefined) {
       consulta.andWhere('u.activo = :activo', { activo });
+    }
+    if (correoVerificado === true) {
+      consulta.andWhere('u.correoVerificadoEn IS NOT NULL');
+    } else if (correoVerificado === false) {
+      consulta.andWhere('u.correoVerificadoEn IS NULL');
     }
 
     if (busqueda !== null) {

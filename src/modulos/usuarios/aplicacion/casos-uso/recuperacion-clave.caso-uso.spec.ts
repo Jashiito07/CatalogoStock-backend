@@ -500,4 +500,31 @@ describe('RF-USU-05: listar clientes', () => {
     });
     expect(despues.elementos[0].codigoRecuperacionVigenteHasta).toBeNull();
   });
+
+  it('RF-USU-05: incluye correoVerificadoEn (null hasta verificar) y el filtro correoVerificado devuelve solo verificados o solo sin verificar; total respeta el filtro', async () => {
+    const c = contexto();
+    const paginacion = { pagina: 1, tamanio: 20 };
+    const sinVerificar = await c.listar.ejecutar(undefined, paginacion);
+    expect(sinVerificar.elementos[0].correoVerificadoEn).toBeNull();
+
+    await c.usuarios.marcarCorreoVerificado(ID_CLIENTE, c.reloj.ahora());
+
+    const todos = await c.listar.ejecutar(undefined, paginacion);
+    const verificados = await c.listar.ejecutar(
+      undefined,
+      paginacion,
+      undefined,
+      true,
+    );
+    const pendientes = await c.listar.ejecutar(
+      undefined,
+      paginacion,
+      undefined,
+      false,
+    );
+    expect(todos.elementos[0].correoVerificadoEn).toEqual(c.reloj.ahora());
+    expect(verificados.total).toBe(1);
+    expect(verificados.elementos[0].id).toBe(ID_CLIENTE);
+    expect(pendientes).toMatchObject({ total: 0, elementos: [] });
+  });
 });

@@ -35,6 +35,11 @@ export const ACCIONES_AUDITORIA = [
   'PRODUCTO_ELIMINADO',
   'IMAGEN_AGREGADA',
   'IMAGEN_ELIMINADA',
+  // F2 (2.8): importación asistida del catálogo en PDF (contrato
+  // productos-importacion, D-49). Migración AgregarAccionesImportacionAuditoria.
+  'IMPORTACION_CREADA',
+  'BORRADORES_APROBADOS',
+  'BORRADORES_DESCARTADOS',
   // F6/F7: su `detalle` se define en esas fases (CA-03).
   'PAGO_VERIFICADO',
   'PEDIDO_ESTADO_CAMBIADO',
@@ -48,6 +53,7 @@ export const ENTIDADES_AUDITORIA = [
   'SESION',
   'MARCA',
   'PRODUCTO',
+  'IMPORTACION',
   'PEDIDO',
   'PAGO',
 ] as const;
@@ -84,6 +90,9 @@ export const ENTIDAD_DE_LA_ACCION: Readonly<
   PRODUCTO_ELIMINADO: 'PRODUCTO',
   IMAGEN_AGREGADA: 'PRODUCTO',
   IMAGEN_ELIMINADA: 'PRODUCTO',
+  IMPORTACION_CREADA: 'IMPORTACION',
+  BORRADORES_APROBADOS: 'IMPORTACION',
+  BORRADORES_DESCARTADOS: 'IMPORTACION',
   PAGO_VERIFICADO: 'PAGO',
   PEDIDO_ESTADO_CAMBIADO: 'PEDIDO',
 };

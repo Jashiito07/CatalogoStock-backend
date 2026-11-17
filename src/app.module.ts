@@ -7,6 +7,7 @@ import { validarVariablesEntorno } from './configuracion/variables-entorno.js';
 // La consulta HTTP de la bitácora no se exporta en `auditoria/index.ts` para
 // evitar un ciclo de importaciones con `usuarios` (ver ese archivo).
 import { ConsultaBitacoraModule } from './modulos/auditoria/consulta-bitacora.module.js';
+import { ImportacionModule } from './modulos/importacion/index.js';
 import { MarcasModule } from './modulos/marcas/index.js';
 import { ProductosModule } from './modulos/productos/index.js';
 import { SaludModule } from './modulos/salud/index.js';
@@ -30,6 +31,7 @@ import { UsuariosModule } from './modulos/usuarios/index.js';
     ConsultaBitacoraModule,
     MarcasModule,
     ProductosModule,
+    ImportacionModule,
   ],
 })
 export class AppModule {}
