@@ -82,6 +82,9 @@ describe('Subfase 2.2 (e2e): marcas (RF-PRO-04)', () => {
   ): Promise<CuerpoMarca> =>
     (await crear(cuerpo).expect(201)).body as CuerpoMarca;
 
+  const parchear = (id: string, cuerpo: Record<string, unknown>) =>
+    comoVendedor(http().patch(`${RUTA}/${id}`)).send(cuerpo);
+
   const listar = (consulta = '') =>
     comoVendedor(http().get(`${RUTA}${consulta}`));
 
@@ -270,12 +273,12 @@ describe('Subfase 2.2 (e2e): marcas (RF-PRO-04)', () => {
       ],
       ['nombre ausente', { color: '#FC5823' }, 'nombre'],
       ['nombre que no es texto', { nombre: 12, color: '#FC5823' }, 'nombre'],
-      ['color sin #', { nombre: 'Yanbal', color: 'FC5823' }, 'color'],
-      ['color corto', { nombre: 'Yanbal', color: '#FC582' }, 'color'],
-      ['color ausente', { nombre: 'Yanbal' }, 'color'],
+      ['color sin #', { nombre: 'Mi Tienda', color: 'FC5823' }, 'color'],
+      ['color corto', { nombre: 'Mi Tienda', color: '#FC582' }, 'color'],
+      ['color ausente', { nombre: 'Mi Tienda' }, 'color'],
       [
         'acento inválido',
-        { nombre: 'Yanbal', color: '#FC5823', colorAcento: 'naranja' },
+        { nombre: 'Mi Tienda', color: '#FC5823', colorAcento: 'naranja' },
         'colorAcento',
       ],
       [
@@ -349,7 +352,7 @@ describe('Subfase 2.2 (e2e): marcas (RF-PRO-04)', () => {
 
   describe('PATCH /marcas/{id}', () => {
     it('RF-PRO-04: cambia solo lo enviado y registra MARCA_ACTUALIZADA con los campos', async () => {
-      const marca = await crearOk({ nombre: 'Yanbal', color: '#FC5823' });
+      const marca = await crearOk({ nombre: 'Mi Tienda', color: '#FC5823' });
 
       const respuesta = await comoVendedor(http().patch(`${RUTA}/${marca.id}`))
         .send({ color: '#2e1a47', activa: false })
@@ -357,7 +360,7 @@ describe('Subfase 2.2 (e2e): marcas (RF-PRO-04)', () => {
 
       expect(respuesta.body).toMatchObject({
         id: marca.id,
-        nombre: 'Yanbal',
+        nombre: 'Mi Tienda',
         color: '#2E1A47',
         textoSobreColor: '#FFFFFF',
         activa: false,
@@ -376,7 +379,7 @@ describe('Subfase 2.2 (e2e): marcas (RF-PRO-04)', () => {
 
     it('colorAcento null quita el acento; un valor nuevo lo cambia y recalcula el texto', async () => {
       const marca = await crearOk({
-        nombre: 'Leonisa',
+        nombre: 'Mi Tienda',
         color: '#222221',
         colorAcento: '#F36E21',
       });
@@ -409,27 +412,27 @@ describe('Subfase 2.2 (e2e): marcas (RF-PRO-04)', () => {
     });
 
     it('renombrar a un nombre ya usado (otras mayúsculas o tildes) → 409 y nada cambia', async () => {
-      await crearOk({ nombre: 'Yanbal', color: '#FC5823' });
-      const avon = await crearOk({ nombre: 'Avon', color: '#FF2469' });
+      await crearOk({ nombre: 'Mi Tienda', color: '#FC5823' });
+      const otra = await crearOk({ nombre: 'Otra Tienda', color: '#FF2469' });
       const antes = await contarAuditoria();
-      const respuesta = await comoVendedor(http().patch(`${RUTA}/${avon.id}`))
-        .send({ nombre: 'ÝANBAL' })
+      const respuesta = await comoVendedor(http().patch(`${RUTA}/${otra.id}`))
+        .send({ nombre: 'MÍ TIENDA' })
         .expect(409);
       expect(respuesta.body.codigo).toBe('MARCA_DUPLICADA');
       const [fila] = await contexto.fuente.query<{ nombre: string }[]>(
         'SELECT nombre FROM marcas WHERE id = $1',
-        [avon.id],
+        [otra.id],
       );
-      expect(fila.nombre).toBe('Avon');
+      expect(fila.nombre).toBe('Otra Tienda');
       expect(await contarAuditoria()).toBe(antes);
     });
 
-    it('puede cambiar las mayúsculas o tildes de su propio nombre', async () => {
-      const marca = await crearOk({ nombre: 'esika', color: '#E1251B' });
+    it('una marca propia puede cambiar las mayúsculas o tildes de su propio nombre', async () => {
+      const marca = await crearOk({ nombre: 'mi tienda', color: '#E1251B' });
       const respuesta = await comoVendedor(http().patch(`${RUTA}/${marca.id}`))
-        .send({ nombre: 'Ésika' })
+        .send({ nombre: 'Mi Tiénda' })
         .expect(200);
-      expect(respuesta.body.nombre).toBe('Ésika');
+      expect(respuesta.body.nombre).toBe('Mi Tiénda');
     });
 
     it('un cuerpo sin cambios → 200 y no registra nada', async () => {
@@ -658,6 +661,230 @@ describe('Subfase 2.2 (e2e): marcas (RF-PRO-04)', () => {
 
     it('sin sesión → 401', async () => {
       await http().get(`${RUTA}/sugeridas`).expect(401);
+    });
+  });
+
+  describe('D-56: marcas conocidas y colores fijos', () => {
+    const COLOR_FIJO = {
+      codigo: 'COLOR_MARCA_FIJO',
+      mensaje: 'Los colores de una marca conocida no se pueden cambiar.',
+      detalles: {},
+    };
+    it.each(['Avon', 'AVON', 'avon', ' Avon '])(
+      'POST «%s» con otro color → 201 con el color oficial #FF2469 y el nombre oficial',
+      async (nombre) => {
+        const respuesta = await crear({ nombre, color: '#000000' }).expect(201);
+        expect(respuesta.body).toMatchObject({
+          nombre: 'Avon',
+          color: '#FF2469',
+          colorAcento: null,
+          textoSobreColor: '#0F172A',
+        });
+      },
+    );
+
+    it.each([
+      ["L'Bel", "L'Bel", '#2E1A47'],
+      ['L´Bel', "L'Bel", '#2E1A47'],
+      ['lbel', "L'Bel", '#2E1A47'],
+      ['Ésika', 'Esika', '#E1251B'],
+    ])(
+      'POST «%s» se guarda como «%s» con %s',
+      async (nombre, oficial, color) => {
+        const marca = await crearOk({ nombre, color: '#123456' });
+        expect(marca).toMatchObject({ nombre: oficial, color });
+        const [fila] = await contexto.fuente.query<
+          { nombre: string; color: string }[]
+        >('SELECT nombre, color FROM marcas');
+        expect(fila).toEqual({ nombre: oficial, color });
+      },
+    );
+
+    it('POST Leonisa impone color y acento oficiales y calcula ambos textos', async () => {
+      const marca = await crearOk({
+        nombre: 'leonisa',
+        color: '#FFFFFF',
+        colorAcento: null,
+      });
+      expect(marca).toMatchObject({
+        nombre: 'Leonisa',
+        color: '#222221',
+        colorAcento: '#F36E21',
+        textoSobreColor: '#FFFFFF',
+        textoSobreAcento: '#1E293B',
+      });
+    });
+
+    it('POST de una variante de una conocida ya creada → 409 MARCA_DUPLICADA', async () => {
+      await crearOk({ nombre: "L'Bel", color: '#2E1A47' });
+      await crear({ nombre: 'lbel', color: '#2E1A47' }).expect(409);
+      expect(await contarMarcas()).toBe(1);
+    });
+
+    it('POST de una marca propia conserva colores libres y su validación', async () => {
+      const marca = await crearOk({
+        nombre: 'Mi Tienda',
+        color: '#123456',
+        colorAcento: '#abcdef',
+      });
+      expect(marca).toMatchObject({
+        nombre: 'Mi Tienda',
+        color: '#123456',
+        colorAcento: '#ABCDEF',
+      });
+    });
+
+    it('PATCH con otro color a una conocida → 422 COLOR_MARCA_FIJO y nada cambia', async () => {
+      const marca = await crearOk({ nombre: 'Yanbal', color: '#FC5823' });
+      const antes = await contarAuditoria();
+      const respuesta = await parchear(marca.id, {
+        color: '#2E1A47',
+      }).expect(422);
+      expect(respuesta.body).toEqual(COLOR_FIJO);
+      const [fila] = await contexto.fuente.query<{ color: string }[]>(
+        'SELECT color FROM marcas WHERE id = $1',
+        [marca.id],
+      );
+      expect(fila.color).toBe('#FC5823');
+      expect(await contarAuditoria()).toBe(antes);
+    });
+
+    it('PATCH que quita o cambia el acento oficial de Leonisa → 422 COLOR_MARCA_FIJO', async () => {
+      const marca = await crearOk({ nombre: 'Leonisa', color: '#222221' });
+      for (const colorAcento of [null, '#FFFFFF']) {
+        const respuesta = await parchear(marca.id, { colorAcento }).expect(422);
+        expect(respuesta.body.codigo).toBe('COLOR_MARCA_FIJO');
+      }
+      const [fila] = await contexto.fuente.query<
+        { color_acento: string | null }[]
+      >('SELECT color_acento FROM marcas WHERE id = $1', [marca.id]);
+      expect(fila.color_acento).toBe('#F36E21');
+    });
+
+    it('PATCH con los mismos colores oficiales → 200 sin cambios ni bitácora', async () => {
+      const marca = await crearOk({ nombre: 'Leonisa', color: '#222221' });
+      const respuesta = await parchear(marca.id, {
+        color: '#222221',
+        colorAcento: '#f36e21',
+      }).expect(200);
+      expect(respuesta.body).toMatchObject({
+        color: '#222221',
+        colorAcento: '#F36E21',
+      });
+      expect(await auditoria('MARCA_ACTUALIZADA')).toHaveLength(0);
+    });
+
+    it('PATCH de activa y orden sigue funcionando en una conocida', async () => {
+      const marca = await crearOk({ nombre: 'Yanbal', color: '#FC5823' });
+      const respuesta = await parchear(marca.id, {
+        activa: false,
+        orden: 4,
+      }).expect(200);
+      expect(respuesta.body).toMatchObject({
+        color: '#FC5823',
+        activa: false,
+        orden: 4,
+      });
+      expect(await auditoria('MARCA_ACTUALIZADA')).toEqual([
+        expect.objectContaining({ detalle: { campos: ['activa', 'orden'] } }),
+      ]);
+    });
+
+    it('PATCH de color a una marca propia sigue libre', async () => {
+      const marca = await crearOk({ nombre: 'Mi Tienda', color: '#123456' });
+      const respuesta = await parchear(marca.id, {
+        color: '#654321',
+      }).expect(200);
+      expect(respuesta.body.color).toBe('#654321');
+    });
+
+    it.each(['Mi Tienda', 'Avon'])(
+      'renombrar una conocida a «%s» → 422 NOMBRE_MARCA_FIJO y nada cambia',
+      async (nombre) => {
+        const marca = await crearOk({ nombre: 'Yanbal', color: '#FC5823' });
+        const respuesta = await parchear(marca.id, { nombre }).expect(422);
+        expect(respuesta.body.codigo).toBe('NOMBRE_MARCA_FIJO');
+        expect(await auditoria('MARCA_ACTUALIZADA')).toHaveLength(0);
+        const [fila] = await contexto.fuente.query<{ nombre: string }[]>(
+          'SELECT nombre FROM marcas WHERE id = $1',
+          [marca.id],
+        );
+        expect(fila.nombre).toBe('Yanbal');
+      },
+    );
+
+    it('renombrar una conocida a una variante de sí misma → 200 con el nombre oficial', async () => {
+      const marca = await crearOk({ nombre: "L'Bel", color: '#2E1A47' });
+      const respuesta = await parchear(marca.id, { nombre: 'LBEL' }).expect(200);
+      expect(respuesta.body.nombre).toBe("L'Bel");
+    });
+
+    it('asignar a una marca propia un nombre conocido le impone los colores oficiales', async () => {
+      const marca = await crearOk({ nombre: 'Mi Tienda', color: '#123456' });
+      const respuesta = await parchear(marca.id, {
+        nombre: 'cyzone',
+        color: '#000000',
+      }).expect(200);
+      expect(respuesta.body).toMatchObject({
+        nombre: 'Cyzone',
+        color: '#A90061',
+        colorAcento: null,
+        textoSobreColor: '#FFFFFF',
+      });
+    });
+
+    it('un color inválido en una conocida → 400 DATOS_INVALIDOS', async () => {
+      const marca = await crearOk({ nombre: 'Yanbal', color: '#FC5823' });
+      const respuesta = await parchear(marca.id, { color: 'rojo' }).expect(400);
+      expect(respuesta.body.codigo).toBe('DATOS_INVALIDOS');
+    });
+
+    it('CA-02: un Cliente no puede cambiar los colores (403) y la marca no cambia', async () => {
+      const marca = await crearOk({ nombre: 'Yanbal', color: '#FC5823' });
+      const respuesta = await comoCliente(http().patch(`${RUTA}/${marca.id}`))
+        .send({ color: '#2E1A47' })
+        .expect(403);
+      expect(respuesta.body).toEqual(NO_AUTORIZADO);
+    });
+
+    it('la lista sugerida y la regla comparten la misma fuente', async () => {
+      const lista = (
+        (await comoVendedor(http().get(`${RUTA}/sugeridas`)).expect(200))
+          .body as {
+          elementos: {
+            nombre: string;
+            color: string;
+            colorAcento: string | null;
+          }[];
+        }
+      ).elementos;
+      for (const sugerida of lista) {
+        const marca = await crearOk({
+          nombre: sugerida.nombre.toUpperCase(),
+          color: '#010203',
+        });
+        expect(marca).toMatchObject({
+          nombre: sugerida.nombre,
+          color: sugerida.color,
+          colorAcento: sugerida.colorAcento,
+        });
+      }
+    });
+
+    it('CA-03: la bitácora no guarda colores ni datos personales', async () => {
+      const marca = await crearOk({ nombre: 'AVON', color: '#000000' });
+      await parchear(marca.id, { activa: false }).expect(200);
+      await parchear(marca.id, { color: '#000000' }).expect(422);
+      const creada = await auditoria('MARCA_CREADA');
+      const actualizada = await auditoria('MARCA_ACTUALIZADA');
+      expect(creada).toEqual([
+        expect.objectContaining({ detalle: { nombre: 'Avon' } }),
+      ]);
+      expect(actualizada).toEqual([
+        expect.objectContaining({ detalle: { campos: ['activa'] } }),
+      ]);
+      const texto = JSON.stringify([...creada, ...actualizada]);
+      expect(texto).not.toMatch(/#[0-9A-Fa-f]{6}|@|0987654321/);
     });
   });
 });

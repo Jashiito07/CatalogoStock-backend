@@ -38,7 +38,7 @@ describe('RF-PRO-04: ActualizarMarcaCasoUso', () => {
     caso.ejecutar({ idVendedor: ID_VENDEDOR, idMarca, cambios });
 
   it('cambia solo lo enviado y registra MARCA_ACTUALIZADA con los campos cambiados', async () => {
-    const marca = await nueva('Yanbal');
+    const marca = await nueva('Mi Tienda', '#FC5823');
     auditoria.registradas.length = 0;
 
     const actualizada = await actualizar(marca.id, {
@@ -47,7 +47,7 @@ describe('RF-PRO-04: ActualizarMarcaCasoUso', () => {
     });
 
     expect(actualizada).toMatchObject({
-      nombre: 'Yanbal',
+      nombre: 'Mi Tienda',
       color: '#2E1A47',
       textoSobreColor: '#FFFFFF',
       activa: false,
@@ -69,7 +69,7 @@ describe('RF-PRO-04: ActualizarMarcaCasoUso', () => {
   it('colorAcento null quita el acento', async () => {
     const marca = await crear.ejecutar({
       idVendedor: ID_VENDEDOR,
-      nombre: 'Leonisa',
+      nombre: 'Mi Tienda',
       color: '#222221',
       colorAcento: '#F36E21',
     });
@@ -107,20 +107,132 @@ describe('RF-PRO-04: ActualizarMarcaCasoUso', () => {
   });
 
   it('RF-PRO-04: renombrar a un nombre de otra marca → MARCA_DUPLICADA y nada cambia', async () => {
-    await nueva('Yanbal');
-    const avon = await nueva('Avon', '#FF2469');
+    await nueva('Mi Tienda');
+    const otra = await nueva('Otra Tienda');
     auditoria.registradas.length = 0;
     await expect(
-      actualizar(avon.id, { nombre: 'ÝANBAL' }),
+      actualizar(otra.id, { nombre: 'MI TIENDA' }),
     ).rejects.toMatchObject({ codigo: 'MARCA_DUPLICADA' });
-    expect((await marcas.buscarPorId(avon.id))?.nombre.valor).toBe('Avon');
+    expect((await marcas.buscarPorId(otra.id))?.nombre.valor).toBe(
+      'Otra Tienda',
+    );
     expect(auditoria.registradas).toHaveLength(0);
   });
 
-  it('puede cambiar solo mayúsculas o tildes de su propio nombre', async () => {
-    const marca = await nueva('esika', '#E1251B');
-    const actualizada = await actualizar(marca.id, { nombre: 'Ésika' });
-    expect(actualizada.nombre).toBe('Ésika');
+  it('una marca propia puede cambiar mayúsculas o tildes de su propio nombre', async () => {
+    const marca = await nueva('mi tienda');
+    const actualizada = await actualizar(marca.id, { nombre: 'Mi Tiénda' });
+    expect(actualizada.nombre).toBe('Mi Tiénda');
+  });
+
+  describe('D-56: marcas conocidas y colores fijos', () => {
+    it('PATCH con otro color a una conocida → COLOR_MARCA_FIJO (422) y nada cambia', async () => {
+      const marca = await nueva('Yanbal');
+      auditoria.registradas.length = 0;
+      await expect(
+        actualizar(marca.id, { color: '#2E1A47' }),
+      ).rejects.toMatchObject({
+        codigo: 'COLOR_MARCA_FIJO',
+        categoria: 'REGLA_NEGOCIO',
+        message: 'Los colores de una marca conocida no se pueden cambiar.',
+      });
+      expect(marcas.marcas[0].color).toBe('#FC5823');
+      expect(auditoria.registradas).toHaveLength(0);
+    });
+
+    it('quitar o cambiar el acento oficial de Leonisa → COLOR_MARCA_FIJO', async () => {
+      const marca = await nueva('Leonisa');
+      await expect(
+        actualizar(marca.id, { colorAcento: null }),
+      ).rejects.toMatchObject({ codigo: 'COLOR_MARCA_FIJO' });
+      await expect(
+        actualizar(marca.id, { colorAcento: '#FFFFFF' }),
+      ).rejects.toMatchObject({ codigo: 'COLOR_MARCA_FIJO' });
+      expect(marcas.marcas[0].colorAcento).toBe('#F36E21');
+    });
+
+    it('poner un acento a una conocida sin acento → COLOR_MARCA_FIJO', async () => {
+      const marca = await nueva('Avon');
+      await expect(
+        actualizar(marca.id, { colorAcento: '#F36E21' }),
+      ).rejects.toMatchObject({ codigo: 'COLOR_MARCA_FIJO' });
+    });
+
+    it('enviar los mismos colores oficiales no es error ni cambia nada', async () => {
+      const marca = await nueva('Leonisa');
+      auditoria.registradas.length = 0;
+      const resultado = await actualizar(marca.id, {
+        color: '#222221',
+        colorAcento: '#f36e21',
+      });
+      expect(resultado.color).toBe('#222221');
+      expect(auditoria.registradas).toHaveLength(0);
+    });
+
+    it('activa y orden se siguen pudiendo cambiar en una conocida', async () => {
+      const marca = await nueva('Yanbal');
+      const resultado = await actualizar(marca.id, {
+        activa: false,
+        orden: 5,
+      });
+      expect(resultado).toMatchObject({
+        activa: false,
+        orden: 5,
+        color: '#FC5823',
+      });
+    });
+
+    it('renombrar una conocida a otro nombre → NOMBRE_MARCA_FIJO (422)', async () => {
+      const marca = await nueva('Yanbal');
+      for (const nombre of ['Mi Tienda', 'Avon']) {
+        await expect(actualizar(marca.id, { nombre })).rejects.toMatchObject({
+          codigo: 'NOMBRE_MARCA_FIJO',
+          categoria: 'REGLA_NEGOCIO',
+        });
+      }
+      expect(marcas.marcas[0].nombre.valor).toBe('Yanbal');
+    });
+
+    it('una variante del propio nombre se acepta y se guarda el nombre oficial', async () => {
+      const marca = await nueva("L'Bel");
+      for (const variante of ['lbel', 'L´Bel', "L'BEL"]) {
+        const resultado = await actualizar(marca.id, { nombre: variante });
+        expect(resultado.nombre).toBe("L'Bel");
+      }
+    });
+
+    it('una marca propia renombrada a un nombre conocido recibe los colores oficiales', async () => {
+      const marca = await nueva('Mi Tienda', '#123456');
+      const resultado = await actualizar(marca.id, {
+        nombre: 'AVON',
+        color: '#000000',
+      });
+      expect(resultado).toMatchObject({
+        nombre: 'Avon',
+        color: '#FF2469',
+        colorAcento: null,
+        textoSobreColor: '#0F172A',
+      });
+    });
+
+    it('una marca propia conserva colores libres', async () => {
+      const marca = await nueva('Mi Tienda');
+      const resultado = await actualizar(marca.id, {
+        color: '#123456',
+        colorAcento: '#ABCDEF',
+      });
+      expect(resultado).toMatchObject({
+        color: '#123456',
+        colorAcento: '#ABCDEF',
+      });
+    });
+
+    it('un color inválido en una conocida sigue siendo DATOS_INVALIDOS', async () => {
+      const marca = await nueva('Yanbal');
+      await expect(
+        actualizar(marca.id, { color: 'rojo' }),
+      ).rejects.toMatchObject({ codigo: 'DATOS_INVALIDOS' });
+    });
   });
 
   it('RNF-03: datos inválidos → DATOS_INVALIDOS y la marca no cambia', async () => {
