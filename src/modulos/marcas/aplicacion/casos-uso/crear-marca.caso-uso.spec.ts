@@ -1,3 +1,4 @@
+import { MARCAS_SUGERIDAS } from '../../dominio/marcas-sugeridas.js';
 import { CrearMarcaCasoUso } from './crear-marca.caso-uso.js';
 import {
   AuditoriaFalsa,
@@ -110,8 +111,8 @@ describe('RF-PRO-04 / RF-PRO-06: CrearMarcaCasoUso', () => {
   it('RNF-03: datos inválidos → DATOS_INVALIDOS y nada se guarda ni se registra', async () => {
     for (const malo of [
       { nombre: 'a' },
-      { color: 'rojo' },
-      { colorAcento: '#ZZZZZZ' },
+      { nombre: 'Mi Tienda', color: 'rojo' },
+      { nombre: 'Mi Tienda', colorAcento: '#ZZZZZZ' },
       { orden: -2 },
     ]) {
       await expect(crear(malo)).rejects.toMatchObject({
@@ -120,6 +121,86 @@ describe('RF-PRO-04 / RF-PRO-06: CrearMarcaCasoUso', () => {
     }
     expect(marcas.marcas).toHaveLength(0);
     expect(auditoria.registradas).toHaveLength(0);
+  });
+
+  describe('D-56: marcas conocidas y colores fijos', () => {
+    it.each([
+      ['Avon', 'Avon'],
+      ['AVON', 'Avon'],
+      ['  avon ', 'Avon'],
+      ["L'Bel", "L'Bel"],
+      ['L´Bel', "L'Bel"],
+      ['lbel', "L'Bel"],
+      ['Ésika', 'Esika'],
+      ['ESIKA', 'Esika'],
+    ])(
+      'el nombre «%s» se guarda como «%s» con los colores oficiales',
+      async (escrito, oficial) => {
+        const marca = await crear({
+          nombre: escrito,
+          color: '#000000',
+          colorAcento: '#FFFFFF',
+        });
+        const sugerida = MARCAS_SUGERIDAS.find((m) => m.nombre === oficial);
+        expect(marca).toMatchObject({
+          nombre: oficial,
+          color: sugerida?.color,
+          colorAcento: sugerida?.colorAcento,
+        });
+      },
+    );
+
+    it('ignora los colores enviados, incluso inválidos o ausentes', async () => {
+      const a = await crear({ nombre: 'Avon', color: 'no es color' });
+      expect(a.color).toBe('#FF2469');
+      const e = await crear({ nombre: 'Esika', color: undefined });
+      expect(e.color).toBe('#E1251B');
+    });
+
+    it('Leonisa recibe su acento oficial y el texto calculado de ambos', async () => {
+      const marca = await crear({ nombre: 'leonisa', color: '#FFFFFF' });
+      expect(marca).toMatchObject({
+        nombre: 'Leonisa',
+        color: '#222221',
+        colorAcento: '#F36E21',
+        textoSobreColor: '#FFFFFF',
+        textoSobreAcento: '#1E293B',
+      });
+    });
+
+    it('una variante de una conocida ya creada → MARCA_DUPLICADA', async () => {
+      await crear({ nombre: "L'Bel" });
+      await expect(crear({ nombre: 'lbel' })).rejects.toMatchObject({
+        codigo: 'MARCA_DUPLICADA',
+      });
+      expect(marcas.marcas).toHaveLength(1);
+    });
+
+    it('una marca propia conserva sus colores libres', async () => {
+      const marca = await crear({
+        nombre: 'Mi Tienda',
+        color: '#123456',
+        colorAcento: '#abcdef',
+      });
+      expect(marca).toMatchObject({
+        color: '#123456',
+        colorAcento: '#ABCDEF',
+      });
+    });
+
+    it('el nombre sigue validándose (2 a 40 caracteres) aunque sea conocido', async () => {
+      await expect(crear({ nombre: 'A' })).rejects.toMatchObject({
+        codigo: 'DATOS_INVALIDOS',
+      });
+    });
+
+    it('MARCA_CREADA registra solo el nombre oficial, sin colores', async () => {
+      const marca = await crear({ nombre: 'ÉSIKA', color: '#000000' });
+      expect(auditoria.registradas[0].actividad.detalle).toEqual({
+        nombre: 'Esika',
+      });
+      expect(marca.nombre).toBe('Esika');
+    });
   });
 
   it('CA-03: si la bitácora falla, el error se propaga (la transacción real deshace la marca)', async () => {

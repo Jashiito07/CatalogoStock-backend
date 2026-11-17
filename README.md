@@ -140,10 +140,16 @@ Contrato completo en `docs/contrato-api/productos.md` («Endpoints: marcas»).
 |---|---|
 | `GET /api/v1/marcas` | Autenticado; `incluirInactivas=true` solo lo respeta el Vendedor |
 | `GET /api/v1/marcas/sugeridas` | Vendedor; lista fija con `yaCreada` |
-| `POST /api/v1/marcas` | Vendedor; 201, 409 `MARCA_DUPLICADA` |
-| `PATCH /api/v1/marcas/{id}` | Vendedor; cuerpo parcial, `colorAcento: null` quita el acento |
+| `POST /api/v1/marcas` | Vendedor; 201, 409 `MARCA_DUPLICADA`; una marca conocida recibe los colores oficiales |
+| `PATCH /api/v1/marcas/{id}` | Vendedor; cuerpo parcial, `colorAcento: null` quita el acento; 422 `COLOR_MARCA_FIJO` / `NOMBRE_MARCA_FIJO` en marcas conocidas |
 
 - No hay `DELETE`: una marca se desactiva (`activa: false`).
+- **Colores fijos (D-56):** Yanbal, Avon, L'Bel, Cyzone, Esika y Leonisa son marcas conocidas
+  (nombre reconocido sin mayúsculas, tildes ni signos: `L'Bel`, `L´Bel`, `lbel`, `Ésika`). Al crearlas el
+  servidor guarda el nombre y los colores oficiales e ignora los enviados; `PATCH` con otros colores →
+  422 `COLOR_MARCA_FIJO`; renombrarlas → 422 `NOMBRE_MARCA_FIJO`; `activa` y `orden` se siguen
+  pudiendo cambiar. Una sola fuente (`dominio/marcas-sugeridas.ts`) alimenta `/marcas/sugeridas` y la regla
+  (`dominio/colores-fijos.ts`). Las marcas propias conservan colores libres.
 - El nombre es único sin distinguir mayúsculas ni tildes (índice único sobre `nombre_busqueda`).
 - `textoSobreColor` y `textoSobreAcento` los calcula el servidor (contraste ≥ 4.5:1, RNF-11).
 - Cada creación y cambio queda en la bitácora (`MARCA_CREADA`, `MARCA_ACTUALIZADA`) en la
@@ -376,7 +382,7 @@ src/
       usuarios.module.ts
       index.ts                    API pública del módulo
     marcas/
-      dominio/                    Marca, NombreMarca, color y contraste, marcas sugeridas
+      dominio/                    Marca, NombreMarca, color y contraste, marcas conocidas y colores fijos
       aplicacion/                 Casos de uso Crear/Actualizar/Listar, MarcasServicio y puerto
       infraestructura/            Tabla marcas (TypeORM)
       presentacion/http/          MarcasController y DTOs

@@ -186,9 +186,9 @@ describe('Subfase 2.3 (e2e): productos (RF-PRO-01 a RF-PRO-05)', () => {
         marca: {
           id: avon.id,
           nombre: 'Avon',
-          color: '#2563EB',
+          color: '#FF2469',
           colorAcento: null,
-          textoSobreColor: '#FFFFFF',
+          textoSobreColor: '#0F172A',
           textoSobreAcento: null,
         },
         precio: '12.50',
@@ -617,7 +617,7 @@ describe('Subfase 2.3 (e2e): productos (RF-PRO-01 a RF-PRO-05)', () => {
       ).expect(200);
       expect(respuesta.body).toMatchObject({
         id: producto.id,
-        marca: { nombre: 'Avon', textoSobreColor: '#FFFFFF' },
+        marca: { nombre: 'Avon', textoSobreColor: '#0F172A' },
         imagenes: [],
       });
     });

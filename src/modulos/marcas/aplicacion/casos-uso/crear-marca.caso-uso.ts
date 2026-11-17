@@ -2,6 +2,7 @@ import type { GeneradorId } from '../../../../compartido/aplicacion/generador-id
 import type { Reloj } from '../../../../compartido/aplicacion/reloj.puerto.js';
 import type { UnidadDeTrabajo } from '../../../../compartido/aplicacion/unidad-trabajo.puerto.js';
 import type { ServicioAuditoria } from '../../../auditoria/index.js';
+import { resolverAltaDeMarca } from '../../dominio/colores-fijos.js';
 import { MarcaDuplicadaError } from '../../dominio/errores-marca.js';
 import { Marca, type MarcaPublica } from '../../dominio/marca.js';
 import type { MarcaRepositorio } from '../puertos/marca.repositorio.js';
@@ -33,11 +34,17 @@ export class CrearMarcaCasoUso {
   async ejecutar(datos: DatosCrearMarca): Promise<MarcaPublica> {
     return this.unidadTrabajo.ejecutar(async () => {
       const orden = datos.orden ?? (await this.marcas.siguienteOrden());
-      const marca = Marca.crear({
-        id: this.generadorId.generar(),
+      // D-56: una marca conocida recibe nombre y colores oficiales.
+      const resuelto = resolverAltaDeMarca({
         nombre: datos.nombre,
         color: datos.color,
         colorAcento: datos.colorAcento,
+      });
+      const marca = Marca.crear({
+        id: this.generadorId.generar(),
+        nombre: resuelto.nombre,
+        color: resuelto.color,
+        colorAcento: resuelto.colorAcento,
         orden,
         ahora: this.reloj.ahora(),
       });

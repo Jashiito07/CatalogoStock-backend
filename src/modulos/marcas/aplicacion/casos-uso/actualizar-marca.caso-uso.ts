@@ -1,6 +1,7 @@
 import type { Reloj } from '../../../../compartido/aplicacion/reloj.puerto.js';
 import type { UnidadDeTrabajo } from '../../../../compartido/aplicacion/unidad-trabajo.puerto.js';
 import type { ServicioAuditoria } from '../../../auditoria/index.js';
+import { resolverCambiosDeMarca } from '../../dominio/colores-fijos.js';
 import {
   MarcaDuplicadaError,
   MarcaNoEncontradaError,
@@ -37,16 +38,18 @@ export class ActualizarMarcaCasoUso {
       if (actual === null) {
         throw new MarcaNoEncontradaError();
       }
-      const { marca, campos } = actual.aplicar(
+      // D-56: colores y nombre fijos de las marcas conocidas.
+      const cambios = resolverCambiosDeMarca(
+        actual.nombre.valor,
         datos.cambios,
-        this.reloj.ahora(),
       );
+      const { marca, campos } = actual.aplicar(cambios, this.reloj.ahora());
       if (campos.length === 0) {
         return marca.aPublica();
       }
 
       if (campos.includes('nombre')) {
-        const clave = NombreMarca.crear(datos.cambios.nombre).clave;
+        const clave = NombreMarca.crear(cambios.nombre).clave;
         const existente = await this.marcas.buscarPorClaveNombre(clave);
         if (existente !== null && existente.id !== marca.id) {
           throw new MarcaDuplicadaError();
