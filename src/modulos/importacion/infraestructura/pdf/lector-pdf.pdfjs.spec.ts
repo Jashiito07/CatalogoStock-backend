@@ -118,8 +118,10 @@ describe('RF-PRO-01: lector de PDF con pdfjs (PDF sintéticos)', () => {
   it('el tiempo máximo de análisis se respeta: sin tiempo, PDF_ILEGIBLE', async () => {
     const pdf = crearPdfSintetico([[{ texto: 'uno', x: 10, y: 10 }]]);
 
+    // Un tiempo negativo deja el límite ya vencido: con 0 ms el resultado dependía de si
+    // todo ocurría dentro del mismo milisegundo.
     await expect(
-      new LectorPdfPdfjs({ tiempoMaximoMs: 0 }).leer(pdf),
+      new LectorPdfPdfjs({ tiempoMaximoMs: -1 }).leer(pdf),
     ).rejects.toMatchObject({ codigo: 'PDF_ILEGIBLE' });
   });
 
