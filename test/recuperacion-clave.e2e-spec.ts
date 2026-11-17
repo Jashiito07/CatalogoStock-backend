@@ -536,6 +536,7 @@ describe('RF-USU-05 (e2e): recuperación asistida y cambio de clave', () => {
         'activo',
         'codigoRecuperacionVigenteHasta',
         'correo',
+        'correoVerificadoEn',
         'creadoEn',
         'id',
         'nombre',

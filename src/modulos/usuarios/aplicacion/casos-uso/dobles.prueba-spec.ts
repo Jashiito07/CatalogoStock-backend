@@ -199,6 +199,7 @@ export class UsuarioRepositorioEnMemoria implements UsuarioRepositorio {
     busqueda: BusquedaClientes | null,
     paginacion: Paginacion,
     activo?: boolean,
+    correoVerificado?: boolean,
   ): Promise<PaginaUsuarios> {
     const coincide = (u: Usuario): boolean => {
       if (busqueda === null) {
@@ -217,6 +218,8 @@ export class UsuarioRepositorioEnMemoria implements UsuarioRepositorio {
         (u) =>
           u.esCliente() &&
           (activo === undefined || u.activo === activo) &&
+          (correoVerificado === undefined ||
+            u.tieneCorreoVerificado() === correoVerificado) &&
           coincide(u),
       )
       .toSorted((a, b) => b.creadoEn.getTime() - a.creadoEn.getTime());

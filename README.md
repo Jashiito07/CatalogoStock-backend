@@ -127,7 +127,10 @@ Migraciones actuales: `CrearTablaUsuarios` (1.2), `CrearTablaSesiones` (1.3),
 `CrearTablaProductos` (2.3), `CrearTablaImagenesProducto` (2.4),
 `AgregarCorreoVerificadoYPropositoCodigos` (correo, D-50) y
 `AgregarAccionesClienteEstadoAuditoria` (acciones `CLIENTE_DESACTIVADO` y
-`CLIENTE_REACTIVADO`, D-53).
+`CLIENTE_REACTIVADO`, D-53),
+`CrearTablasImportacionProducto` (2.8: tablas `importaciones_producto` y `borradores_producto`) y
+`AgregarAccionesImportacionAuditoria` (2.8: acciones `IMPORTACION_CREADA`, `BORRADORES_APROBADOS`,
+`BORRADORES_DESCARTADOS` y entidad `IMPORTACION`).
 
 ## Marcas (RF-PRO-04, RF-PRO-06, RF-CAT-05, D-43, D-48)
 
@@ -191,13 +194,48 @@ Contrato en `docs/contrato-api/productos.md` («Endpoints: imágenes»).
 - Las altas bloquean la fila del producto (`FOR UPDATE`): dos subidas simultáneas nunca superan las 5.
 - Bitácora en la misma transacción: `IMAGEN_AGREGADA` e `IMAGEN_ELIMINADA` (solo `idImagen`, sin rutas).
 
+## Importación asistida del catálogo en PDF (RF-PRO-01, RF-PRO-02, D-49, D-55)
+
+Contrato en `docs/contrato-api/productos-importacion.md`. Todas las rutas son del **Vendedor** (un Cliente recibe
+403 y queda `ACCESO_DENEGADO`). El módulo `importacion` lee un PDF de catálogo y propone **borradores** de producto
+(nombre, código, precio, descripción); el Vendedor los revisa y solo al **aprobar** se crea el producto, con las
+mismas validaciones y la misma bitácora que `POST /productos`. Un borrador nunca es un producto: vive en sus
+propias tablas y ninguna consulta de `productos` lo incluye.
+
+| Ruta | Qué hace |
+|---|---|
+| `POST /api/v1/productos/importaciones` | `multipart/form-data`: `archivo` (PDF) y `marcaId` (marca **activa**); 201 con la importación y sus totales |
+| `GET /api/v1/productos/importaciones/{id}` | La importación con `totales` (`pendientes`, `aprobados`, `descartados`, `conAdvertencias`) |
+| `GET /api/v1/productos/importaciones/{id}/borradores` | Paginada; filtros `estado` (por defecto `PENDIENTE`), `conAdvertencias`, `busqueda`, `paginaPdf` |
+| `PATCH /api/v1/productos/importaciones/borradores/{id}` | Edita `nombre`, `descripcion`, `precio`, `marcaId`, `disponibilidad` (solo `PENDIENTE`) |
+| `POST /api/v1/productos/importaciones/borradores/aprobar` | `{ "ids": [...] }` (1 a 100); una transacción por borrador; idempotente (`NO_PENDIENTE`) |
+| `POST /api/v1/productos/importaciones/borradores/descartar` | `{ "ids": [...] }` (1 a 100); un descartado no se reactiva |
+
+- **Límites**: 60 MB, 400 páginas, sin cifrar, 60 s de análisis y 5 análisis por hora y por IP (D-17). La firma
+  `%PDF-` se comprueba en el servidor (no la extensión): texto con extensión `.pdf` → 415. Más de 60 MB o de 400
+  páginas → 413; cifrado, dañado, sin texto o sin productos reconocibles → 422 `PDF_ILEGIBLE`.
+- **El PDF no se guarda**: se procesa en memoria y se descarta; solo queda su huella SHA-256 (índice único: el mismo
+  PDF dos veces → 409 `IMPORTACION_DUPLICADA` con el `id` de la existente). La bitácora
+  (`IMPORTACION_CREADA`, `BORRADORES_APROBADOS`, `BORRADORES_DESCARTADOS`) guarda solo ids y cantidades, nunca el
+  PDF, su contenido ni el nombre del archivo.
+- **Lectura** (`pdfjs-dist`, solo texto: sin ejecutar JavaScript del PDF, sin OCR ni recursos remotos): el lector
+  de dominio tiene **dos perfiles** y elige solo el que reconoce más productos. **Yanbal**: `CÓD. 43873`, precios
+  `US$ 35.00` y `P. Normal US$ 44.00`. **Leonisa**: `A. Magic Corset | $48.99 | descripción` seguido de
+  `Ref. 091183 / Copa B`; el código es la primera referencia y, con varias (`VARIAS_REFERENCIAS`), todas van a la
+  descripción con sus tallas y colores. Es **aproximado y conservador**: lo que no entiende queda vacío con su
+  advertencia (`SIN_PRECIO`, `SIN_CODIGO`, `NOMBRE_DUDOSO`, `CODIGO_REPETIDO`, `YA_IMPORTADO`; informativas:
+  `PRECIO_EN_OFERTA`, `VARIAS_REFERENCIAS`). Un borrador sin precio no se aprueba. No se importan imágenes.
+- Los precios son `numeric(7,2)` y viajan como texto (`"35.00"`). El código admite letras y dígitos (hasta 20).
+- Las pruebas usan PDF sintéticos creados en la propia prueba y fragmentos reproducidos a mano; el PDF real de
+  referencia (`Contexto/catalogos/`) **no** se versiona.
+
 ## Recuperación y cambio de clave (RF-USU-05, D-35, D-39)
 
 Contrato completo en `docs/contrato-api/recuperacion-clave.md`.
 
 | Ruta | Acceso | Límite por IP (D-17) |
 |---|---|---|
-| `GET /api/v1/usuarios` | Vendedor; solo Clientes, paginado, `busqueda` sin mayúsculas ni tildes, `activo=true\|false` | - |
+| `GET /api/v1/usuarios` | Vendedor; solo Clientes, paginado, `busqueda` sin mayúsculas ni tildes, `activo=true\|false` y `correoVerificado=true\|false` (400 si no es booleano; `total` respeta el filtro); cada elemento incluye `activo` y `correoVerificadoEn` (fecha ISO o `null`) | - |
 | `PATCH /api/v1/usuarios/{id}/estado` | Vendedor; `{ "activo": false \| true }` desactiva (revoca sus sesiones) o reactiva a un Cliente; 200 con el Usuario (`activo`), idempotente · 404 `USUARIO_NO_ENCONTRADO` · 422 `OPERACION_NO_PERMITIDA` (el Vendedor). Bitácora: `CLIENTE_DESACTIVADO` / `CLIENTE_REACTIVADO` con `{ idUsuario }` (D-53) | - |
 | `POST /api/v1/usuarios/{id}/codigo-recuperacion` | Vendedor; 201 con el código (única vez que viaja) | — |
 | `POST /api/v1/autenticacion/recuperacion` | Público; correo + código + clave nueva → 204 | 5 por minuto |
@@ -351,6 +389,13 @@ src/
       presentacion/http/          ProductosController, ImagenesController (público) y DTOs
       productos.module.ts
       index.ts                    API pública del módulo
+    importacion/
+      dominio/                    Lector del catálogo (perfiles Yanbal y Leonisa, sin pdfjs), Borrador, advertencias, validación del PDF
+      aplicacion/                 Casos de uso de importación y borradores, puertos (lector de PDF, productos, marcas)
+      infraestructura/            Tablas importaciones_producto y borradores_producto (TypeORM), lector con pdfjs-dist
+      presentacion/http/          ImportacionesController y DTOs
+      importacion.module.ts
+      index.ts
     salud/
       dominio/                    EstadoSalud
       aplicacion/                 ConsultarSaludCasoUso y puerto ComprobadorBaseDatos

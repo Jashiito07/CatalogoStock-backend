@@ -55,12 +55,15 @@ export interface UsuarioRepositorio {
   /**
    * Solo usuarios con rol `CLIENTE`, del más reciente al más antiguo, con la
    * búsqueda sin mayúsculas ni tildes en nombre, correo y teléfono y, si se
-   * indica `activo`, solo los de ese estado (D-53).
+   * indica `activo`, solo los de ese estado (D-53) y, si se indica
+   * `correoVerificado`, solo los verificados (`true`) o sin verificar
+   * (`false`).
    */
   listarClientes(
     busqueda: BusquedaClientes | null,
     paginacion: Paginacion,
     activo?: boolean,
+    correoVerificado?: boolean,
   ): Promise<PaginaUsuarios>;
 }
 

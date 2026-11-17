@@ -45,6 +45,8 @@ export interface RespuestaResumenCliente {
   correo: string;
   telefono: string;
   activo: boolean;
+  /** Fecha ISO en que confirmó su correo, o `null` si aún no. */
+  correoVerificadoEn: string | null;
   creadoEn: string;
   codigoRecuperacionVigenteHasta: string | null;
 }
@@ -73,6 +75,7 @@ export function aRespuestaPaginaClientes(
       correo: cliente.correo,
       telefono: cliente.telefono,
       activo: cliente.activo,
+      correoVerificadoEn: cliente.correoVerificadoEn?.toISOString() ?? null,
       creadoEn: cliente.creadoEn.toISOString(),
       codigoRecuperacionVigenteHasta:
         cliente.codigoRecuperacionVigenteHasta?.toISOString() ?? null,

@@ -39,7 +39,10 @@ describe('Migración de acciones de clientes (e2e): enumerado, reversión y reap
     // Con acciones nuevas en la bitácora la reversión se niega (nunca borra
     // la bitácora): la base de pruebas se vacía antes.
     await contexto.limpiar();
-    await contexto.fuente.undoLastMigration({ transaction: 'each' });
+    // Primero las dos migraciones posteriores (importación del catálogo).
+    for (let i = 0; i < 3; i++) {
+      await contexto.fuente.undoLastMigration({ transaction: 'each' });
+    }
     const sinNuevas = await acciones();
     expect(sinNuevas).not.toContain('CLIENTE_DESACTIVADO');
     expect(sinNuevas).not.toContain('CLIENTE_REACTIVADO');

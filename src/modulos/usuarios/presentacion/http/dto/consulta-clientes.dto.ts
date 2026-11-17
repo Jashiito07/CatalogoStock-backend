@@ -7,6 +7,8 @@ import {
 } from '../../../dominio/busqueda-clientes.js';
 
 export const MENSAJE_FILTRO_ACTIVO = 'El filtro activo debe ser true o false.';
+export const MENSAJE_FILTRO_CORREO_VERIFICADO =
+  'El filtro correoVerificado debe ser true o false.';
 
 /** Convierte solo el texto exacto `true` o `false`; cualquier otro valor lo rechaza `IsBoolean`. */
 function aBooleanoDeConsulta({ value }: { value: unknown }): unknown {
@@ -35,4 +37,10 @@ export class ConsultaClientesDto extends PaginacionDto {
   @Transform(aBooleanoDeConsulta)
   @IsBoolean({ message: MENSAJE_FILTRO_ACTIVO })
   activo?: boolean;
+
+  /** `true`: solo con el correo verificado; `false`: solo sin verificar. */
+  @IsOptional()
+  @Transform(aBooleanoDeConsulta)
+  @IsBoolean({ message: MENSAJE_FILTRO_CORREO_VERIFICADO })
+  correoVerificado?: boolean;
 }
