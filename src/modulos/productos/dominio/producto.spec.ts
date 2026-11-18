@@ -66,12 +66,48 @@ describe('RF-PRO-01 / RF-PRO-05: Producto', () => {
     expect(producto.aPublico()).toEqual({
       id: ID,
       nombre: 'Crema hidratante',
+      codigo: null,
       marcaId: MARCA,
       precio: Dinero.desdeTexto('12.50'),
       descripcion: '',
       disponibilidad: 'DISPONIBLE',
       creadoEn: AHORA,
       actualizadoEn: AHORA,
+    });
+  });
+
+  describe('D-57: código del catálogo', () => {
+    it.each(['43873', '011715C', 'A', 'a1B2c3', 'X'.repeat(20)])(
+      'acepta «%s» y lo expone en la vista pública',
+      (codigo) => {
+        expect(crear({ codigo }).codigo).toBe(codigo);
+        expect(crear({ codigo }).aPublico().codigo).toBe(codigo);
+      },
+    );
+
+    it('recorta los espacios de los extremos; sin código (o null) queda en null', () => {
+      expect(crear({ codigo: ' 43873 ' }).codigo).toBe('43873');
+      expect(crear().codigo).toBeNull();
+      expect(crear({ codigo: null }).codigo).toBeNull();
+    });
+
+    it.each(['', ' ', '43 873', '43-873', 'X'.repeat(21), 'código', 43873, {}])(
+      'rechaza %j',
+      (codigo) => {
+        expect(() => crear({ codigo })).toThrowError(DATOS_INVALIDOS);
+        expect(() => crear().aplicar({ codigo }, DESPUES)).toThrowError(
+          DATOS_INVALIDOS,
+        );
+      },
+    );
+
+    it('aplicar cambia el código y lo informa en los campos; el mismo código no cuenta', () => {
+      const original = crear({ codigo: '43873' });
+      expect(original.aplicar({ codigo: '43873' }, DESPUES).campos).toEqual([]);
+      const { producto, campos } = original.aplicar({ codigo: '5054' }, DESPUES);
+      expect(campos).toEqual(['codigo']);
+      expect(producto.codigo).toBe('5054');
+      expect(original.codigo).toBe('43873');
     });
   });
 

@@ -12,6 +12,7 @@ import {
   PdfIlegibleError,
 } from '../../dominio/errores-importacion.js';
 import { Importacion } from '../../dominio/importacion.js';
+import type { CalculadorTotalesImportacion } from '../calculador-totales.js';
 import { leerCatalogo } from '../../dominio/lector-catalogo.js';
 import type { CalculadorHuella } from '../puertos/calculador-huella.puerto.js';
 import type { BorradorRepositorio } from '../puertos/borrador.repositorio.js';
@@ -55,6 +56,7 @@ export class CrearImportacionCasoUso {
     private readonly reloj: Reloj,
     private readonly unidadTrabajo: UnidadDeTrabajo,
     private readonly auditoria: ServicioAuditoria,
+    private readonly totales: CalculadorTotalesImportacion,
   ) {}
 
   async ejecutar(datos: DatosCrearImportacion): Promise<VistaImportacion> {
@@ -82,15 +84,8 @@ export class CrearImportacionCasoUso {
       );
     }
 
-    const codigos = lectura.borradores.flatMap((b) =>
-      b.codigo === null ? [] : [b.codigo],
-    );
-    const yaImportados = await this.borradores.codigosAprobados([
-      ...new Set(codigos),
-    ]);
-
     const ahora = this.reloj.ahora();
-    const importacion = Importacion.reconstituir({
+    const importacion = Importacion.crear({
       id: this.generadorId.generar(),
       nombreArchivo: sanearNombreArchivo(datos.nombreArchivo),
       huella,
@@ -104,13 +99,14 @@ export class CrearImportacionCasoUso {
         idImportacion: importacion.id,
         marcaId: marca.id,
         extraido,
-        codigosYaImportados: yaImportados,
         ahora,
       }),
     );
 
     try {
       await this.unidadTrabajo.ejecutar(async () => {
+        // D-57: el catálogo nuevo de la marca archiva el anterior de esa marca.
+        await this.importaciones.archivarVigentesDeMarca(marca.id, ahora);
         await this.importaciones.insertar(importacion);
         for (let i = 0; i < borradores.length; i += LOTE_INSERCION) {
           await this.borradores.insertarVarios(
@@ -143,7 +139,7 @@ export class CrearImportacionCasoUso {
     return {
       importacion,
       marca,
-      totales: await this.borradores.totales(importacion.id),
+      totales: await this.totales.calcular(importacion),
     };
   }
 }

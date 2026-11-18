@@ -27,12 +27,22 @@ import {
   validarNombreProducto,
   validarPrecio,
 } from '../../../../productos/validaciones.js';
+import {
+  ACCIONES_REVISION,
+  esAccionRevision,
+} from '../../../dominio/accion-revision.js';
 import { ESTADOS_BORRADOR, esEstadoBorrador } from '../../../dominio/borrador.js';
+import {
+  ESTADOS_IMPORTACION,
+  esEstadoImportacion,
+} from '../../../dominio/importacion.js';
 
 const presente = (_objeto: unknown, valor: unknown): boolean =>
   valor !== undefined;
 
 export const MENSAJE_ESTADO_INVALIDO = `El estado debe ser ${ESTADOS_BORRADOR.join(', ')}.`;
+export const MENSAJE_ESTADO_IMPORTACION_INVALIDO = `El estado debe ser ${ESTADOS_IMPORTACION.join(' o ')}.`;
+export const MENSAJE_ACCION_INVALIDA = `La acción debe ser ${ACCIONES_REVISION.join(', ')}.`;
 export const MENSAJE_PAGINA_PDF_INVALIDA =
   'La página del PDF debe ser un número entero mayor o igual a 1.';
 export const MENSAJE_CON_ADVERTENCIAS_INVALIDO =
@@ -79,6 +89,16 @@ export class ConsultaBorradoresDto extends PaginacionDto {
   @IsInt({ message: MENSAJE_PAGINA_PDF_INVALIDA })
   @Min(1, { message: MENSAJE_PAGINA_PDF_INVALIDA })
   paginaPdf?: number;
+
+  /** D-57: `ACTUALIZAR`, `NUEVO` o `CAMBIO_PRECIO`. */
+  @ValidateIf(presente)
+  @CumpleReglaDominio((valor) => {
+    if (!esAccionRevision(valor)) {
+      throw new Error(MENSAJE_ACCION_INVALIDA);
+    }
+    return valor;
+  }, MENSAJE_ACCION_INVALIDA)
+  accion?: string;
 }
 
 /**
@@ -115,4 +135,26 @@ export class IdsBorradoresDto {
   @ArrayMaxSize(100, { message: MENSAJE_IDS_INVALIDOS })
   @IsUUID(undefined, { each: true, message: MENSAJE_IDS_INVALIDOS })
   ids: string[];
+}
+
+/**
+ * Parámetros de GET /productos/importaciones (D-57): paginación del README
+ * más estado (VIGENTE o ARCHIVADA) y marcaId.
+ */
+export class ConsultaImportacionesDto extends PaginacionDto {
+  @ValidateIf(presente)
+  @CumpleReglaDominio(
+    (valor) => {
+      if (!esEstadoImportacion(valor)) {
+        throw new Error(MENSAJE_ESTADO_IMPORTACION_INVALIDO);
+      }
+      return valor;
+    },
+    MENSAJE_ESTADO_IMPORTACION_INVALIDO,
+  )
+  estado?: string;
+
+  @ValidateIf(presente)
+  @IsUUID(undefined, { message: MENSAJE_MARCA_ID_INVALIDO })
+  marcaId?: string;
 }

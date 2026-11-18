@@ -16,6 +16,8 @@ import type {
   ServicioAuditoria,
 } from '../../../auditoria/index.js';
 import type { MarcaPublica } from '../../../marcas/index.js';
+import { claveDeEmparejamiento } from '../../dominio/busqueda.js';
+import { CodigoDuplicadoError } from '../../dominio/errores-producto.js';
 import type { Producto } from '../../dominio/producto.js';
 import type { DirectorioMarcas } from '../puertos/directorio-marcas.puerto.js';
 import type {
@@ -113,7 +115,8 @@ export class ProductoRepositorioEnMemoria implements ProductoRepositorio {
         (p) =>
           !filtro.clave ||
           p.nombreBusqueda.includes(filtro.clave) ||
-          p.descripcionBusqueda.includes(filtro.clave),
+          p.descripcionBusqueda.includes(filtro.clave) ||
+          (p.codigo ?? '').toLowerCase().includes(filtro.clave),
       )
       .toSorted(
         (a, b) =>
@@ -129,7 +132,23 @@ export class ProductoRepositorioEnMemoria implements ProductoRepositorio {
     });
   }
 
+  private hayCodigoRepetido(producto: Producto): boolean {
+    return (
+      producto.codigo !== null &&
+      this.productos.some(
+        (p) =>
+          p.id !== producto.id &&
+          !this.eliminados.has(p.id) &&
+          p.marcaId === producto.marcaId &&
+          p.codigo === producto.codigo,
+      )
+    );
+  }
+
   crear(producto: Producto): Promise<void> {
+    if (this.hayCodigoRepetido(producto)) {
+      return Promise.reject(new CodigoDuplicadoError());
+    }
     this.productos.push(producto);
     return Promise.resolve();
   }
@@ -139,8 +158,79 @@ export class ProductoRepositorioEnMemoria implements ProductoRepositorio {
     if (indice < 0 || this.eliminados.has(producto.id)) {
       return Promise.resolve(false);
     }
+    if (this.hayCodigoRepetido(producto)) {
+      return Promise.reject(new CodigoDuplicadoError());
+    }
     this.productos[indice] = producto;
     return Promise.resolve(true);
+  }
+
+  private vivosDeMarca(marcaId: string): Producto[] {
+    return this.productos.filter(
+      (p) => p.marcaId === marcaId && !this.eliminados.has(p.id),
+    );
+  }
+
+  buscarPorCodigos(
+    marcaId: string,
+    codigos: readonly string[],
+  ): Promise<Producto[]> {
+    return Promise.resolve(
+      this.vivosDeMarca(marcaId).filter(
+        (p) => p.codigo !== null && codigos.includes(p.codigo),
+      ),
+    );
+  }
+
+  async codigosExistentes(
+    marcaId: string,
+    codigos: readonly string[],
+  ): Promise<Set<string>> {
+    const encontrados = await this.buscarPorCodigos(marcaId, codigos);
+    return new Set(encontrados.flatMap((p) => (p.codigo === null ? [] : [p.codigo])));
+  }
+
+  buscarSinCodigoPorClaves(
+    marcaId: string,
+    claves: readonly string[],
+  ): Promise<Producto[]> {
+    return Promise.resolve(
+      this.vivosDeMarca(marcaId).filter(
+        (p) => p.codigo === null && claves.includes(claveDeEmparejamiento(p.nombre)),
+      ),
+    );
+  }
+
+  bloquearSinCodigoPorClave(marcaId: string, clave: string): Promise<Producto[]> {
+    return this.buscarSinCodigoPorClaves(marcaId, [clave]);
+  }
+
+  async bloquearPorCodigo(
+    marcaId: string,
+    codigo: string,
+  ): Promise<Producto | null> {
+    return (await this.buscarPorCodigos(marcaId, [codigo]))[0] ?? null;
+  }
+
+  listarAusentes(
+    marcaId: string,
+    codigosPresentes: readonly string[],
+    paginacion: Paginacion,
+  ): Promise<Pagina<Producto>> {
+    const ausentes = this.vivosDeMarca(marcaId)
+      .filter((p) => p.codigo !== null && !codigosPresentes.includes(p.codigo))
+      .toSorted(
+        (a, b) =>
+          a.nombreBusqueda.localeCompare(b.nombreBusqueda) ||
+          a.id.localeCompare(b.id),
+      );
+    const inicio = desplazamiento(paginacion);
+    return Promise.resolve({
+      elementos: ausentes.slice(inicio, inicio + paginacion.tamanio),
+      pagina: paginacion.pagina,
+      tamanio: paginacion.tamanio,
+      total: ausentes.length,
+    });
   }
 
   marcarEliminado(id: string): Promise<boolean> {

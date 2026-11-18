@@ -7,6 +7,7 @@
 import type { GeneradorId } from '../../../../compartido/aplicacion/generador-id.puerto.js';
 import type { Reloj } from '../../../../compartido/aplicacion/reloj.puerto.js';
 import type { UnidadDeTrabajo } from '../../../../compartido/aplicacion/unidad-trabajo.puerto.js';
+import { Dinero } from '../../../../compartido/dominio/dinero.js';
 import { ErrorDominio } from '../../../../compartido/dominio/errores.js';
 import {
   desplazamiento,
@@ -18,13 +19,19 @@ import type {
   ServicioAuditoria,
 } from '../../../auditoria/index.js';
 import type { MarcaPublica } from '../../../marcas/index.js';
+import {
+  claveDeEmparejamiento,
+  type Disponibilidad,
+} from '../../../productos/validaciones.js';
 import type { Borrador } from '../../dominio/borrador.js';
-import type { Importacion, TotalesImportacion } from '../../dominio/importacion.js';
+import type { Importacion, TotalesBorradores } from '../../dominio/importacion.js';
 import { requiereRevision } from '../../dominio/advertencias.js';
 import type { PaginaTexto } from '../../dominio/texto-pagina.js';
 import type {
   BorradorRepositorio,
   FiltroBorradores,
+  PendienteSinCodigo,
+  PendientesPorCodigo,
 } from '../puertos/borrador.repositorio.js';
 import type { CalculadorHuella } from '../puertos/calculador-huella.puerto.js';
 import type {
@@ -33,20 +40,30 @@ import type {
 } from '../puertos/creador-productos.puerto.js';
 import type { DirectorioMarcas } from '../puertos/directorio-marcas.puerto.js';
 import {
+  type FiltroImportaciones,
   HuellaDuplicadaError,
   type ImportacionRepositorio,
 } from '../puertos/importacion.repositorio.js';
 import type { LectorPdf } from '../puertos/lector-pdf.puerto.js';
+import type {
+  ProductoAusente,
+  ProductoConCodigo,
+  ProductoSinCodigo,
+  ProductosExistentes,
+} from '../puertos/productos-existentes.puerto.js';
 
 export const INICIO = new Date('2026-11-16T15:00:00.000Z');
 export const ID_VENDEDOR = '00000000-0000-4000-8000-0000000000aa';
 export const ID_MARCA_ACTIVA = '00000000-0000-4000-8000-0000000000b1';
 export const ID_MARCA_INACTIVA = '00000000-0000-4000-8000-0000000000b2';
 export const ID_MARCA_INEXISTENTE = '00000000-0000-4000-8000-0000000000b9';
+/** Otra marca activa, para probar que archivar no cruza marcas (D-57). */
+export const ID_OTRA_MARCA = '00000000-0000-4000-8000-0000000000b3';
 
 export class RelojFalso implements Reloj {
+  constructor(public actual: Date = INICIO) {}
   ahora(): Date {
-    return INICIO;
+    return this.actual;
   }
 }
 
@@ -76,6 +93,7 @@ export class DirectorioMarcasEnMemoria implements DirectorioMarcas {
   marcas: MarcaPublica[] = [
     marca(ID_MARCA_ACTIVA, 'Yanbal', true),
     marca(ID_MARCA_INACTIVA, 'Cyzone', false),
+    marca(ID_OTRA_MARCA, 'Leonisa', true),
   ];
 
   buscarPorId(id: string): Promise<MarcaPublica | null> {
@@ -104,6 +122,10 @@ export class ImportacionRepositorioEnMemoria implements ImportacionRepositorio {
     return Promise.resolve(this.importaciones.find((i) => i.id === id) ?? null);
   }
 
+  bloquearPorId(id: string): Promise<Importacion | null> {
+    return this.buscarPorId(id);
+  }
+
   buscarPorHuella(huella: string): Promise<Importacion | null> {
     if (this.ocultarEnLaPrimeraBusqueda) {
       // La subida rival aún no se había guardado cuando se hizo la primera búsqueda.
@@ -114,12 +136,52 @@ export class ImportacionRepositorioEnMemoria implements ImportacionRepositorio {
       this.importaciones.find((i) => i.huella === huella) ?? null,
     );
   }
+
+  archivarVigentesDeMarca(marcaId: string, ahora: Date): Promise<number> {
+    let archivadas = 0;
+    this.importaciones = this.importaciones.map((i) => {
+      if (i.marcaId === marcaId && i.estado === 'VIGENTE') {
+        archivadas++;
+        return i.archivar(ahora);
+      }
+      return i;
+    });
+    return Promise.resolve(archivadas);
+  }
+
+  listar(
+    filtro: FiltroImportaciones,
+    paginacion: Paginacion,
+  ): Promise<Pagina<Importacion>> {
+    const coincidencias = this.importaciones
+      .filter((i) => filtro.estado === undefined || i.estado === filtro.estado)
+      .filter((i) => filtro.marcaId === undefined || i.marcaId === filtro.marcaId)
+      .toSorted(
+        (a, b) =>
+          b.creadaEn.getTime() - a.creadaEn.getTime() || b.id.localeCompare(a.id),
+      );
+    const inicio = desplazamiento(paginacion);
+    return Promise.resolve({
+      elementos: coincidencias.slice(inicio, inicio + paginacion.tamanio),
+      pagina: paginacion.pagina,
+      tamanio: paginacion.tamanio,
+      total: coincidencias.length,
+    });
+  }
+
+  listarArchivadas(): Promise<Importacion[]> {
+    return Promise.resolve(this.importaciones.filter((i) => i.estaArchivada));
+  }
+
+  eliminar(id: string): Promise<boolean> {
+    const antes = this.importaciones.length;
+    this.importaciones = this.importaciones.filter((i) => i.id !== id);
+    return Promise.resolve(this.importaciones.length < antes);
+  }
 }
 
 export class BorradorRepositorioEnMemoria implements BorradorRepositorio {
   borradores: Borrador[] = [];
-  /** Códigos que se consideran ya aprobados en otra importación. */
-  yaAprobados = new Set<string>();
 
   insertarVarios(nuevos: readonly Borrador[]): Promise<void> {
     this.borradores.push(...nuevos);
@@ -172,7 +234,7 @@ export class BorradorRepositorioEnMemoria implements BorradorRepositorio {
     });
   }
 
-  totales(idImportacion: string): Promise<TotalesImportacion> {
+  totales(idImportacion: string): Promise<TotalesBorradores> {
     const propios = this.borradores.filter((b) => b.idImportacion === idImportacion);
     const pendientes = propios.filter((b) => b.estado === 'PENDIENTE');
     return Promise.resolve({
@@ -183,8 +245,66 @@ export class BorradorRepositorioEnMemoria implements BorradorRepositorio {
     });
   }
 
-  codigosAprobados(codigos: readonly string[]): Promise<Set<string>> {
-    return Promise.resolve(new Set(codigos.filter((c) => this.yaAprobados.has(c))));
+  listarTodos(filtro: FiltroBorradores): Promise<Borrador[]> {
+    return this.listar(filtro, {
+      pagina: 1,
+      tamanio: Number.MAX_SAFE_INTEGER,
+    }).then((pagina) => [...pagina.elementos]);
+  }
+
+  pendientesSinCodigo(idImportacion: string): Promise<PendienteSinCodigo[]> {
+    return Promise.resolve(
+      this.borradores
+        .filter(
+          (b) =>
+            b.idImportacion === idImportacion &&
+            b.estado === 'PENDIENTE' &&
+            b.codigo === null,
+        )
+        .map((b) => ({
+          marcaId: b.marcaId,
+          nombre: b.nombre,
+          nombreDudoso: b.advertencias.includes('NOMBRE_DUDOSO'),
+        })),
+    );
+  }
+
+  pendientesPorCodigo(idImportacion: string): Promise<PendientesPorCodigo[]> {
+    const grupos = new Map<string, PendientesPorCodigo>();
+    for (const b of this.borradores) {
+      if (
+        b.idImportacion !== idImportacion ||
+        b.estado !== 'PENDIENTE' ||
+        b.codigo === null
+      ) {
+        continue;
+      }
+      const clave = `${b.marcaId}:${b.codigo}`;
+      const grupo = grupos.get(clave) ?? {
+        marcaId: b.marcaId,
+        codigo: b.codigo,
+        cantidad: 0,
+      };
+      grupo.cantidad++;
+      grupos.set(clave, grupo);
+    }
+    return Promise.resolve([...grupos.values()]);
+  }
+
+  codigosDeImportacion(idImportacion: string): Promise<string[]> {
+    return Promise.resolve([
+      ...new Set(
+        this.borradores
+          .filter((b) => b.idImportacion === idImportacion)
+          .flatMap((b) => (b.codigo === null ? [] : [b.codigo])),
+      ),
+    ]);
+  }
+
+  eliminarDeImportacion(idImportacion: string): Promise<number> {
+    const antes = this.borradores.length;
+    this.borradores = this.borradores.filter((b) => b.idImportacion !== idImportacion);
+    return Promise.resolve(antes - this.borradores.length);
   }
 }
 
@@ -212,11 +332,155 @@ export class CalculadorHuellaFalso implements CalculadorHuella {
   }
 }
 
+/** Un producto del catálogo falso, con su marca y su eliminación lógica. */
+export interface ProductoFalso {
+  id: string;
+  nombre: string;
+  /** `null`: producto sin código (se empareja por nombre, D-57). */
+  codigo: string | null;
+  precio: Dinero;
+  marcaId: string;
+  disponibilidad: Disponibilidad;
+  eliminado: boolean;
+}
+
+/**
+ * Productos publicados en memoria (puerto `ProductosExistentes`): busca por
+ * código dentro de una marca ignorando los eliminados, empareja por nombre los
+ * que no tienen código y registra cada actualización de precio.
+ */
+export class ProductosExistentesFalso implements ProductosExistentes {
+  productos: ProductoFalso[] = [];
+  /** Cada llamada a `actualizarPrecio`, para comprobar que solo cambia el precio. */
+  actualizaciones: Array<{ idProducto: string; precio: string; idVendedor: string }> = [];
+  /** Cuántas veces se bloqueó un producto por código o por nombre. */
+  bloqueos = 0;
+
+  agregar(
+    datos: Partial<ProductoFalso> & { codigo: string | null; marcaId?: string },
+  ): ProductoFalso {
+    const producto: ProductoFalso = {
+      id: datos.id ?? `00000000-0000-4000-8000-${String(700 + this.productos.length).padStart(12, '0')}`,
+      nombre: datos.nombre ?? 'Producto existente',
+      codigo: datos.codigo,
+      precio: datos.precio ?? Dinero.desdeTexto('30.00'),
+      marcaId: datos.marcaId ?? ID_MARCA_ACTIVA,
+      disponibilidad: datos.disponibilidad ?? 'DISPONIBLE',
+      eliminado: datos.eliminado ?? false,
+    };
+    this.productos.push(producto);
+    return producto;
+  }
+
+  private vivos(marcaId: string): ProductoFalso[] {
+    return this.productos.filter((p) => p.marcaId === marcaId && !p.eliminado);
+  }
+
+  private conCodigo(marcaId: string): Array<ProductoFalso & { codigo: string }> {
+    return this.vivos(marcaId).filter(
+      (p): p is ProductoFalso & { codigo: string } => p.codigo !== null,
+    );
+  }
+
+  buscarPorCodigos(
+    marcaId: string,
+    codigos: readonly string[],
+  ): Promise<ProductoConCodigo[]> {
+    return Promise.resolve(
+      this.conCodigo(marcaId).filter((p) => codigos.includes(p.codigo)),
+    );
+  }
+
+  async codigosExistentes(
+    marcaId: string,
+    codigos: readonly string[],
+  ): Promise<Set<string>> {
+    return new Set(
+      (await this.buscarPorCodigos(marcaId, codigos)).map((p) => p.codigo),
+    );
+  }
+
+  bloquearPorCodigo(
+    marcaId: string,
+    codigo: string,
+  ): Promise<ProductoConCodigo | null> {
+    this.bloqueos++;
+    return Promise.resolve(
+      this.conCodigo(marcaId).find((p) => p.codigo === codigo) ?? null,
+    );
+  }
+
+  buscarSinCodigoPorNombres(
+    marcaId: string,
+    nombres: readonly string[],
+  ): Promise<ProductoSinCodigo[]> {
+    const claves = nombres.map(claveDeEmparejamiento);
+    return Promise.resolve(
+      this.vivos(marcaId).filter(
+        (p) => p.codigo === null && claves.includes(claveDeEmparejamiento(p.nombre)),
+      ),
+    );
+  }
+
+  bloquearSinCodigoPorNombre(
+    marcaId: string,
+    nombre: string,
+  ): Promise<ProductoSinCodigo[]> {
+    this.bloqueos++;
+    return this.buscarSinCodigoPorNombres(marcaId, [nombre]);
+  }
+
+  actualizarPrecio(datos: {
+    idVendedor: string;
+    idProducto: string;
+    precio: string;
+  }): Promise<void> {
+    const producto = this.productos.find((p) => p.id === datos.idProducto);
+    if (producto === undefined) {
+      return Promise.reject(new Error('El producto no existe.'));
+    }
+    producto.precio = Dinero.desdeTexto(datos.precio);
+    this.actualizaciones.push(datos);
+    return Promise.resolve();
+  }
+  listarAusentes(
+    marcaId: string,
+    codigosPresentes: readonly string[],
+    paginacion: Paginacion,
+  ): Promise<Pagina<ProductoAusente>> {
+    const ausentes = this.conCodigo(marcaId)
+      .filter((p) => !codigosPresentes.includes(p.codigo))
+      .toSorted((a, b) => a.nombre.localeCompare(b.nombre) || a.id.localeCompare(b.id));
+    const inicio = desplazamiento(paginacion);
+    return Promise.resolve({
+      elementos: ausentes
+        .slice(inicio, inicio + paginacion.tamanio)
+        .map((p) => ({
+          id: p.id,
+          nombre: p.nombre,
+          codigo: p.codigo,
+          precio: p.precio,
+          disponibilidad: p.disponibilidad,
+        })),
+      pagina: paginacion.pagina,
+      tamanio: paginacion.tamanio,
+      total: ausentes.length,
+    });
+  }
+}
+
 export class CreadorProductosFalso implements CreadorProductos {
   creados: DatosProductoAprobado[] = [];
   /** Nombres que fallan con el error indicado. */
   fallos = new Map<string, ErrorDominio>();
   private contador = 0;
+
+  /**
+   * Si se da el catálogo, cada producto creado con código se agrega a él: así
+   * un producto creado por una aprobación se ve como «ya existente» en la
+   * siguiente (D-57).
+   */
+  constructor(private readonly catalogo?: ProductosExistentesFalso) {}
 
   crear(datos: DatosProductoAprobado): Promise<string> {
     const fallo = this.fallos.get(datos.nombre);
@@ -225,9 +489,17 @@ export class CreadorProductosFalso implements CreadorProductos {
     }
     this.creados.push(datos);
     this.contador++;
-    return Promise.resolve(
-      `00000000-0000-4000-8000-${String(900 + this.contador).padStart(12, '0')}`,
-    );
+    const id = `00000000-0000-4000-8000-${String(900 + this.contador).padStart(12, '0')}`;
+    if (this.catalogo !== undefined) {
+      this.catalogo.agregar({
+        id,
+        nombre: datos.nombre,
+        codigo: datos.codigo,
+        marcaId: datos.marcaId,
+        precio: Dinero.desdeTexto(datos.precio),
+      });
+    }
+    return Promise.resolve(id);
   }
 }
 

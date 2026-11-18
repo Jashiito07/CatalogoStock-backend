@@ -7,8 +7,10 @@ import {
   MarcaInactivaError,
   MarcaNoEncontradaError,
 } from '../../dominio/errores-importacion.js';
+import { emparejarBorradores } from '../productos-de-borradores.js';
 import type { BorradorRepositorio } from '../puertos/borrador.repositorio.js';
 import type { DirectorioMarcas } from '../puertos/directorio-marcas.puerto.js';
+import type { ProductosExistentes } from '../puertos/productos-existentes.puerto.js';
 
 export interface DatosEditarBorrador {
   idBorrador: string;
@@ -27,6 +29,7 @@ export class EditarBorradorCasoUso {
   constructor(
     private readonly borradores: BorradorRepositorio,
     private readonly marcas: DirectorioMarcas,
+    private readonly productos: ProductosExistentes,
     private readonly reloj: Reloj,
     private readonly unidadTrabajo: UnidadDeTrabajo,
   ) {}
@@ -55,7 +58,13 @@ export class EditarBorradorCasoUso {
       if (campos.length > 0) {
         await this.borradores.guardar(borrador);
       }
-      return borrador.aPublico();
+      // D-57: al cambiar la marca puede cambiar el producto que se actualizará.
+      const emparejados = await emparejarBorradores([borrador], this.productos);
+      const emparejamiento = emparejados.get(borrador.id);
+      return borrador.aPublico(
+        emparejamiento?.existente ?? null,
+        emparejamiento?.ambiguo ?? false,
+      );
     });
   }
 }

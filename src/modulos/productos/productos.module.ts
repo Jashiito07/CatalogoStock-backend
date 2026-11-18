@@ -245,11 +245,16 @@ import { ProductosController } from './presentacion/http/productos.controller.js
     },
     {
       provide: ProductosServicio,
-      inject: [PRODUCTO_REPOSITORIO, CrearProductoCasoUso],
+      inject: [
+        PRODUCTO_REPOSITORIO,
+        CrearProductoCasoUso,
+        ActualizarProductoCasoUso,
+      ],
       useFactory: (
         productos: ProductoRepositorio,
         crearProducto: CrearProductoCasoUso,
-      ) => new ProductosServicio(productos, crearProducto),
+        actualizarProducto: ActualizarProductoCasoUso,
+      ) => new ProductosServicio(productos, crearProducto, actualizarProducto),
     },
   ],
   exports: [ProductosServicio],

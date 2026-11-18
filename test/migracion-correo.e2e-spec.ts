@@ -42,8 +42,8 @@ describe('Migración del correo (e2e): esquema, reversión y reaplicación', () 
     // bitácora): la base de pruebas se vacía antes.
     await contexto.limpiar();
     // Primero se revierten las migraciones posteriores (importación del
-    // catálogo, dos; acciones de clientes, D-53) y después la del correo.
-    for (let i = 0; i < 4; i++) {
+    // catálogo, dos; catálogos mensuales, D-57; acciones de clientes, D-53) y después la del correo.
+    for (let i = 0; i < 5; i++) {
       await contexto.fuente.undoLastMigration({ transaction: 'each' });
     }
     expect(await columnas('usuarios')).not.toContain('correo_verificado_en');

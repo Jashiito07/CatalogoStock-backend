@@ -34,10 +34,60 @@ export interface ProductoRepositorio {
     paginacion: Paginacion,
   ): Promise<Pagina<Producto>>;
 
+  /** Falla con `CodigoDuplicadoError` si el código ya existe en la marca (D-57). */
   crear(producto: Producto): Promise<void>;
 
-  /** `false` si el producto ya no existe o está eliminado. */
+  /**
+   * `false` si el producto ya no existe o está eliminado. Falla con
+   * `CodigoDuplicadoError` si el código ya existe en la marca (D-57).
+   */
   guardar(producto: Producto): Promise<boolean>;
+
+  /** Los productos no eliminados de la marca cuyo código está entre `codigos` (D-57). */
+  buscarPorCodigos(
+    marcaId: string,
+    codigos: readonly string[],
+  ): Promise<Producto[]>;
+
+  /** Solo los códigos que ya tienen un producto no eliminado en la marca (consulta ligera). */
+  codigosExistentes(
+    marcaId: string,
+    codigos: readonly string[],
+  ): Promise<Set<string>>;
+
+  /**
+   * El producto no eliminado de la marca con ese código, bloqueado hasta el
+   * fin de la transacción en curso (`FOR UPDATE`): serializa las aprobaciones
+   * del mismo código (D-57).
+   */
+  bloquearPorCodigo(marcaId: string, codigo: string): Promise<Producto | null>;
+
+  /**
+   * Productos no eliminados de la marca **sin código** cuya clave de
+   * emparejamiento (`claveDeEmparejamiento` del nombre) está entre `claves`
+   * (D-57, emparejado por nombre).
+   */
+  buscarSinCodigoPorClaves(
+    marcaId: string,
+    claves: readonly string[],
+  ): Promise<Producto[]>;
+
+  /**
+   * Como `buscarSinCodigoPorClaves` para una sola clave, **bloqueando** los
+   * productos encontrados y serializando (bloqueo asesor por marca y clave) a
+   * quienes aprueban el mismo nombre a la vez, aunque aún no exista ninguno.
+   */
+  bloquearSinCodigoPorClave(marcaId: string, clave: string): Promise<Producto[]>;
+
+  /**
+   * Productos de la marca con código, no eliminados, cuyo código **no** está
+   * en `codigosPresentes` (D-57, «ausentes»). Ordenados por nombre y id.
+   */
+  listarAusentes(
+    marcaId: string,
+    codigosPresentes: readonly string[],
+    paginacion: Paginacion,
+  ): Promise<Pagina<Producto>>;
 
   /** Marca el producto como eliminado; `false` si no existe o ya lo estaba. */
   marcarEliminado(id: string, ahora: Date): Promise<boolean>;

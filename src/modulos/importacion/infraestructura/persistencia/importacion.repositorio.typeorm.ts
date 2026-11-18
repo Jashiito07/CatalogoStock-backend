@@ -1,9 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import type { Repository } from 'typeorm';
+import type { FindOptionsWhere, Repository } from 'typeorm';
+import {
+  desplazamiento,
+  type Pagina,
+  type Paginacion,
+} from '../../../../compartido/dominio/paginacion.js';
 import { restriccionUnicaVioladaEn } from '../../../../compartido/infraestructura/errores-base-datos.js';
 import { repositorioEnCurso } from '../../../../compartido/infraestructura/unidad-trabajo.typeorm.js';
 import {
+  type FiltroImportaciones,
   HuellaDuplicadaError,
   type ImportacionRepositorio,
 } from '../../aplicacion/puertos/importacion.repositorio.js';
@@ -19,6 +25,8 @@ function aDominio(fila: ImportacionOrmEntity): Importacion {
     huella: fila.huella,
     marcaId: fila.idMarca,
     paginas: fila.paginas,
+    estado: fila.estado,
+    archivadaEn: fila.archivadaEn,
     creadaEn: fila.fechaCreacion,
   });
 }
@@ -43,6 +51,8 @@ export class ImportacionRepositorioTypeorm implements ImportacionRepositorio {
         huella: importacion.huella,
         idMarca: importacion.marcaId,
         paginas: importacion.paginas,
+        estado: importacion.estado,
+        archivadaEn: importacion.archivadaEn,
         fechaCreacion: importacion.creadaEn,
       });
     } catch (error) {
@@ -58,8 +68,68 @@ export class ImportacionRepositorioTypeorm implements ImportacionRepositorio {
     return fila ? aDominio(fila) : null;
   }
 
+  async bloquearPorId(id: string): Promise<Importacion | null> {
+    const fila = await this.filas.findOne({
+      where: { id },
+      lock: { mode: 'pessimistic_write' },
+    });
+    return fila ? aDominio(fila) : null;
+  }
+
   async buscarPorHuella(huella: string): Promise<Importacion | null> {
     const fila = await this.filas.findOneBy({ huella });
     return fila ? aDominio(fila) : null;
+  }
+
+  async archivarVigentesDeMarca(marcaId: string, ahora: Date): Promise<number> {
+    // Una subida por marca a la vez: sin esto, dos subidas simultáneas
+    // dejarían dos vigentes y la segunda fallaría contra el índice único.
+    await this.filas.manager.query(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      [`importaciones_producto:${marcaId}`],
+    );
+    const resultado = await this.filas.update(
+      { idMarca: marcaId, estado: 'VIGENTE' },
+      { estado: 'ARCHIVADA', archivadaEn: ahora },
+    );
+    return resultado.affected ?? 0;
+  }
+
+  async listar(
+    filtro: FiltroImportaciones,
+    paginacion: Paginacion,
+  ): Promise<Pagina<Importacion>> {
+    const donde: FindOptionsWhere<ImportacionOrmEntity> = {};
+    if (filtro.estado !== undefined) {
+      donde.estado = filtro.estado;
+    }
+    if (filtro.marcaId !== undefined) {
+      donde.idMarca = filtro.marcaId;
+    }
+    const [filas, total] = await this.filas.findAndCount({
+      where: donde,
+      order: { fechaCreacion: 'DESC', id: 'DESC' },
+      skip: desplazamiento(paginacion),
+      take: paginacion.tamanio,
+    });
+    return {
+      elementos: filas.map(aDominio),
+      pagina: paginacion.pagina,
+      tamanio: paginacion.tamanio,
+      total,
+    };
+  }
+
+  async listarArchivadas(): Promise<Importacion[]> {
+    const filas = await this.filas.find({
+      where: { estado: 'ARCHIVADA' },
+      order: { archivadaEn: 'ASC', id: 'ASC' },
+    });
+    return filas.map(aDominio);
+  }
+
+  async eliminar(id: string): Promise<boolean> {
+    const resultado = await this.filas.delete({ id });
+    return (resultado.affected ?? 0) > 0;
   }
 }

@@ -30,8 +30,11 @@ import { UsuariosModule } from './modulos/usuarios/index.js';
     UsuariosModule,
     ConsultaBitacoraModule,
     MarcasModule,
-    ProductosModule,
+    // D-57: ImportacionModule va ANTES que ProductosModule. Express resuelve las
+    // rutas en el orden de registro, y `GET /productos/importaciones` (lista)
+    // debe ganarle a `GET /productos/:id` de ProductosController.
     ImportacionModule,
+    ProductosModule,
   ],
 })
 export class AppModule {}

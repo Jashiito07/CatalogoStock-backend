@@ -3,10 +3,12 @@
 // para aplicar exactamente las mismas reglas que `POST /productos` sin copiar
 // código. Solo TypeScript puro: no importan NestJS ni TypeORM.
 export {
+  MENSAJE_CODIGO_INVALIDO,
   MENSAJE_DESCRIPCION_INVALIDA,
   MENSAJE_MARCA_ID_INVALIDO,
   MENSAJE_NOMBRE_INVALIDO,
   MENSAJE_PRECIO_INVALIDO,
+  validarCodigo,
   validarDescripcion,
   validarMarcaId,
   validarNombreProducto,
@@ -20,6 +22,7 @@ export {
 } from './dominio/disponibilidad.js';
 export {
   claveDeBusqueda,
+  claveDeEmparejamiento,
   MENSAJE_BUSQUEDA_INVALIDA,
   validarBusqueda,
 } from './dominio/busqueda.js';

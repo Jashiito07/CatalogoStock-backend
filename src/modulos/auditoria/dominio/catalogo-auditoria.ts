@@ -40,6 +40,10 @@ export const ACCIONES_AUDITORIA = [
   'IMPORTACION_CREADA',
   'BORRADORES_APROBADOS',
   'BORRADORES_DESCARTADOS',
+  // Catálogos mensuales (contrato productos-importacion, D-57): eliminación
+  // manual o por retención (6 meses) de una importación. Migración
+  // AgregarCodigoProductoYCicloImportacion.
+  'IMPORTACION_ELIMINADA',
   // F6/F7: su `detalle` se define en esas fases (CA-03).
   'PAGO_VERIFICADO',
   'PEDIDO_ESTADO_CAMBIADO',
@@ -93,6 +97,7 @@ export const ENTIDAD_DE_LA_ACCION: Readonly<
   IMPORTACION_CREADA: 'IMPORTACION',
   BORRADORES_APROBADOS: 'IMPORTACION',
   BORRADORES_DESCARTADOS: 'IMPORTACION',
+  IMPORTACION_ELIMINADA: 'IMPORTACION',
   PAGO_VERIFICADO: 'PAGO',
   PEDIDO_ESTADO_CAMBIADO: 'PEDIDO',
 };

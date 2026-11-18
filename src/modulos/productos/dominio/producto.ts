@@ -26,10 +26,17 @@ export const MENSAJE_DESCRIPCION_INVALIDA =
 export const MENSAJE_MARCA_ID_INVALIDO =
   'La marca debe indicarse con su identificador (UUID).';
 
+/** «CÓD.» o «Ref.» del catálogo de la marca: letras y dígitos, de 1 a 20 (D-57). */
+export const FORMATO_CODIGO = /^[A-Za-z0-9]{1,20}$/;
+export const MENSAJE_CODIGO_INVALIDO =
+  'El código debe tener de 1 a 20 letras o dígitos, sin espacios ni símbolos.';
+
 /** Vista pública de un producto para otros módulos y para la API. */
 export interface ProductoPublico {
   id: string;
   nombre: string;
+  /** Código del catálogo de la marca (único por marca entre los no eliminados) o `null` (D-57). */
+  codigo: string | null;
   marcaId: string;
   /** Dinero exacto; se serializa como texto `"12.50"`. */
   precio: Dinero;
@@ -42,6 +49,7 @@ export interface ProductoPublico {
 export interface DatosProducto {
   id: string;
   nombre: string;
+  codigo: string | null;
   marcaId: string;
   precio: Dinero;
   descripcion: string;
@@ -53,6 +61,8 @@ export interface DatosProducto {
 export interface DatosCrearProducto {
   id: string;
   nombre: unknown;
+  /** Opcional (`undefined` o `null`: sin código). */
+  codigo?: unknown;
   marcaId: unknown;
   precio: unknown;
   /** Opcional: por defecto vacía. */
@@ -65,6 +75,7 @@ export interface DatosCrearProducto {
 /** Cambios parciales: `undefined` = sin cambio. */
 export interface CambiosProducto {
   nombre?: unknown;
+  codigo?: unknown;
   marcaId?: unknown;
   precio?: unknown;
   descripcion?: unknown;
@@ -72,7 +83,24 @@ export interface CambiosProducto {
 }
 
 export type CampoProducto =
-  'nombre' | 'marcaId' | 'precio' | 'descripcion' | 'disponibilidad';
+  | 'nombre'
+  | 'codigo'
+  | 'marcaId'
+  | 'precio'
+  | 'descripcion'
+  | 'disponibilidad';
+
+/** Código de catálogo: de 1 a 20 letras o dígitos tras recortar espacios (D-57). */
+export function validarCodigo(entrada: unknown): string {
+  if (typeof entrada !== 'string') {
+    throw errorDeCampo('codigo', MENSAJE_CODIGO_INVALIDO);
+  }
+  const recortado = entrada.trim();
+  if (!FORMATO_CODIGO.test(recortado)) {
+    throw errorDeCampo('codigo', MENSAJE_CODIGO_INVALIDO);
+  }
+  return recortado;
+}
 
 /** Nombre de 2 a 120 caracteres tras recortar y unir espacios repetidos. */
 export function validarNombreProducto(entrada: unknown): string {
@@ -134,6 +162,10 @@ export class Producto {
     return new Producto({
       id: datos.id,
       nombre: validarNombreProducto(datos.nombre),
+      codigo:
+        datos.codigo === undefined || datos.codigo === null
+          ? null
+          : validarCodigo(datos.codigo),
       marcaId: validarMarcaId(datos.marcaId),
       precio: validarPrecio(datos.precio),
       descripcion:
@@ -158,6 +190,9 @@ export class Producto {
   }
   get nombre(): string {
     return this.datos.nombre;
+  }
+  get codigo(): string | null {
+    return this.datos.codigo;
   }
   get marcaId(): string {
     return this.datos.marcaId;
@@ -212,6 +247,13 @@ export class Producto {
         campos.push('nombre');
       }
     }
+    if (cambios.codigo !== undefined) {
+      const codigo = validarCodigo(cambios.codigo);
+      if (codigo !== this.datos.codigo) {
+        siguiente.codigo = codigo;
+        campos.push('codigo');
+      }
+    }
     if (cambios.marcaId !== undefined) {
       const marcaId = validarMarcaId(cambios.marcaId);
       if (marcaId !== this.datos.marcaId) {
@@ -253,6 +295,7 @@ export class Producto {
     return {
       id: this.id,
       nombre: this.nombre,
+      codigo: this.codigo,
       marcaId: this.marcaId,
       precio: this.precio,
       descripcion: this.descripcion,

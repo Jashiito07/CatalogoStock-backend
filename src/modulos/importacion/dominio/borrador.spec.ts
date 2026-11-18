@@ -21,16 +21,12 @@ function extraido(cambios: Partial<BorradorExtraido> = {}): BorradorExtraido {
   };
 }
 
-function crear(
-  cambios: Partial<BorradorExtraido> = {},
-  yaImportados: string[] = [],
-): Borrador {
+function crear(cambios: Partial<BorradorExtraido> = {}): Borrador {
   return Borrador.desdeExtraccion({
     id: '00000000-0000-4000-8000-000000000001',
     idImportacion: '00000000-0000-4000-8000-0000000000a1',
     marcaId: MARCA,
     extraido: extraido(cambios),
-    codigosYaImportados: new Set(yaImportados),
     ahora: AHORA,
   });
 }
@@ -78,20 +74,66 @@ describe('RF-PRO-01: advertencias de un borrador', () => {
   it('las informativas (PRECIO_EN_OFERTA, VARIAS_REFERENCIAS) no cuentan como «con advertencias»', () => {
     expect(requiereRevision(['PRECIO_EN_OFERTA', 'VARIAS_REFERENCIAS'])).toBe(false);
     expect(requiereRevision(['PRECIO_EN_OFERTA', 'SIN_PRECIO'])).toBe(true);
-    expect(requiereRevision(['YA_IMPORTADO'])).toBe(true);
+    // D-57: YA_IMPORTADO ahora es informativa (se actualizará el producto que ya existe).
+    expect(requiereRevision(['YA_IMPORTADO'])).toBe(false);
     expect(requiereRevision([])).toBe(false);
   });
 });
 
 describe('RF-PRO-01: borrador', () => {
-  it('nace PENDIENTE, DISPONIBLE y con la marca de la importación; YA_IMPORTADO si el código ya fue aprobado', () => {
-    const borrador = crear({}, ['43873']);
+  it('nace PENDIENTE, DISPONIBLE y con la marca de la importación; YA_IMPORTADO no se guarda (D-57)', () => {
+    const borrador = crear();
 
     expect(borrador.estado).toBe('PENDIENTE');
     expect(borrador.disponibilidad).toBe('DISPONIBLE');
     expect(borrador.marcaId).toBe(MARCA);
     expect(borrador.idProducto).toBeNull();
-    expect(borrador.advertencias).toEqual(['PRECIO_EN_OFERTA', 'YA_IMPORTADO']);
+    expect(borrador.advertencias).toEqual(['PRECIO_EN_OFERTA']);
+  });
+
+  describe('D-57: producto existente y YA_IMPORTADO (informativa, se deduce al leer)', () => {
+    const existente = {
+      id: '00000000-0000-4000-8000-0000000000c1',
+      nombre: 'Crema Hidratante Mani',
+      precio: Dinero.desdeTexto('30.00'),
+      emparejadoPor: 'CODIGO' as const,
+    };
+
+    it('un pendiente con producto existente lo muestra y agrega YA_IMPORTADO en el orden del contrato', () => {
+      const publico = crear().aPublico(existente);
+
+      expect(publico.productoExistente).toEqual(existente);
+      expect(publico.advertencias).toEqual(['PRECIO_EN_OFERTA', 'YA_IMPORTADO']);
+      expect(requiereRevision(publico.advertencias)).toBe(false);
+    });
+
+    it('sin producto existente no hay productoExistente ni YA_IMPORTADO, aunque uno viejo siguiera guardado', () => {
+      const conViejo = Borrador.reconstituir({
+        ...crear().aPublico(),
+        pagina: 7,
+        posicion: 0,
+        advertencias: ['PRECIO_EN_OFERTA', 'YA_IMPORTADO'],
+        creadoEn: AHORA,
+        actualizadoEn: AHORA,
+      });
+
+      expect(conViejo.aPublico().productoExistente).toBeNull();
+      expect(conViejo.aPublico().advertencias).toEqual(['PRECIO_EN_OFERTA']);
+    });
+
+    it('un borrador aprobado o descartado no muestra producto existente', () => {
+      expect(
+        crear().aprobar(existente.id, AHORA).aPublico(existente).productoExistente,
+      ).toBeNull();
+      expect(
+        crear().descartar(AHORA).aPublico(existente).advertencias,
+      ).not.toContain('YA_IMPORTADO');
+    });
+
+    it('editar el borrador no guarda YA_IMPORTADO', () => {
+      const { borrador } = crear().editar({ precio: '30' }, AHORA);
+      expect(borrador.advertencias).not.toContain('YA_IMPORTADO');
+    });
   });
 
   it('conserva CODIGO_REPETIDO, VARIAS_REFERENCIAS y un NOMBRE_DUDOSO fijado al leer', () => {
@@ -172,21 +214,19 @@ describe('RF-PRO-01: borrador', () => {
     });
   });
 
-  describe('al aprobar: la descripción termina con «Cód. <código>»', () => {
+  describe('D-57: al aprobar, la descripción del producto ya no lleva «Cód. <código>»', () => {
     it.each([
-      [null, '43873', 'Cód. 43873'],
-      ['Cont. 50 ml', '43873', 'Cont. 50 ml Cód. 43873'],
+      [null, '43873', ''],
+      ['Cont. 50 ml', '43873', 'Cont. 50 ml'],
       ['Cont. 50 ml', null, 'Cont. 50 ml'],
-      ['Ya dice Cód. 43873', '43873', 'Ya dice Cód. 43873'],
-      [null, '011715C', 'Cód. 011715C'],
+      [null, '011715C', ''],
     ])('descripción %j, código %j → «%s»', (descripcion, codigo, esperado) => {
       expect(crear({ descripcion, codigo }).descripcionParaProducto()).toBe(esperado);
     });
 
-    it('con la descripción en el límite de 2000 caracteres, recorta la descripción y conserva el código', () => {
+    it('con la descripción en el límite de 2000 caracteres la conserva completa', () => {
       const resultado = crear({ descripcion: 'a'.repeat(2000) }).descripcionParaProducto();
       expect([...resultado]).toHaveLength(2000);
-      expect(resultado.endsWith(' Cód. 43873')).toBe(true);
     });
   });
 

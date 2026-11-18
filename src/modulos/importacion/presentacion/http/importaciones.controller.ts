@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -16,7 +17,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { DatosInvalidosError } from '../../../../compartido/dominio/errores.js';
 import { idUuid } from '../../../../compartido/presentacion/id-uuid.js';
 import { LimiteIntentos } from '../../../../compartido/presentacion/limite-intentos.js';
-import { paginacionDe } from '../../../../compartido/presentacion/paginacion.dto.js';
+import {
+  PaginacionDto,
+  paginacionDe,
+} from '../../../../compartido/presentacion/paginacion.dto.js';
 import { claveDeBusqueda } from '../../../productos/validaciones.js';
 import {
   type ActorAutenticado,
@@ -27,12 +31,18 @@ import { AprobarBorradoresCasoUso } from '../../aplicacion/casos-uso/aprobar-bor
 import { CrearImportacionCasoUso } from '../../aplicacion/casos-uso/crear-importacion.caso-uso.js';
 import { DescartarBorradoresCasoUso } from '../../aplicacion/casos-uso/descartar-borradores.caso-uso.js';
 import { EditarBorradorCasoUso } from '../../aplicacion/casos-uso/editar-borrador.caso-uso.js';
+import { EliminarImportacionCasoUso } from '../../aplicacion/casos-uso/eliminar-importacion.caso-uso.js';
+import { ListarAusentesCasoUso } from '../../aplicacion/casos-uso/listar-ausentes.caso-uso.js';
 import { ListarBorradoresCasoUso } from '../../aplicacion/casos-uso/listar-borradores.caso-uso.js';
+import { ListarImportacionesCasoUso } from '../../aplicacion/casos-uso/listar-importaciones.caso-uso.js';
 import { ObtenerImportacionCasoUso } from '../../aplicacion/casos-uso/obtener-importacion.caso-uso.js';
 import { TAMANIO_MAXIMO_PDF_BYTES } from '../../dominio/archivo-pdf.js';
+import { esAccionRevision } from '../../dominio/accion-revision.js';
 import { esEstadoBorrador } from '../../dominio/borrador.js';
+import { esEstadoImportacion } from '../../dominio/importacion.js';
 import {
   ConsultaBorradoresDto,
+  ConsultaImportacionesDto,
   CrearImportacionDto,
   EditarBorradorDto,
   IdsBorradoresDto,
@@ -40,10 +50,14 @@ import {
 import {
   aRespuestaBorrador,
   aRespuestaImportacion,
+  aRespuestaListaAusentes,
   aRespuestaListaBorradores,
+  aRespuestaListaImportaciones,
   type RespuestaBorrador,
   type RespuestaImportacion,
+  type RespuestaListaAusentes,
   type RespuestaListaBorradores,
+  type RespuestaListaImportaciones,
 } from './respuestas.js';
 
 /** Archivo que entrega Multer en memoria (solo lo que usamos). */
@@ -75,7 +89,33 @@ export class ImportacionesController {
     private readonly aprobarBorradores: AprobarBorradoresCasoUso,
     @Inject(DescartarBorradoresCasoUso)
     private readonly descartarBorradores: DescartarBorradoresCasoUso,
+    @Inject(ListarImportacionesCasoUso)
+    private readonly listarImportaciones: ListarImportacionesCasoUso,
+    @Inject(ListarAusentesCasoUso)
+    private readonly listarAusentes: ListarAusentesCasoUso,
+    @Inject(EliminarImportacionCasoUso)
+    private readonly eliminarImportacion: EliminarImportacionCasoUso,
   ) {}
+
+  /**
+   * GET /api/v1/productos/importaciones (D-57): lista paginada, la más
+   * reciente primero; filtros `estado` y `marcaId`.
+   */
+  @Get()
+  async listarTodas(
+    @Query() consulta: ConsultaImportacionesDto,
+  ): Promise<RespuestaListaImportaciones> {
+    return aRespuestaListaImportaciones(
+      await this.listarImportaciones.ejecutar({
+        estado:
+          consulta.estado !== undefined && esEstadoImportacion(consulta.estado)
+            ? consulta.estado
+            : undefined,
+        marcaId: consulta.marcaId?.toLowerCase(),
+        paginacion: paginacionDe(consulta),
+      }),
+    );
+  }
 
   /**
    * POST /api/v1/productos/importaciones - `multipart/form-data` con el campo
@@ -176,6 +216,39 @@ export class ImportacionesController {
     );
   }
 
+  /**
+   * DELETE /api/v1/productos/importaciones/{id} (D-57): elimina la
+   * importación y sus borradores, nunca los productos; libera la huella.
+   */
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async eliminar(
+    @UsuarioActual() actor: ActorAutenticado,
+    @Param('id', idUuid) idImportacion: string,
+  ): Promise<void> {
+    await this.eliminarImportacion.ejecutar({
+      idVendedor: actor.id,
+      idImportacion: idImportacion.toLowerCase(),
+    });
+  }
+
+  /**
+   * GET /api/v1/productos/importaciones/{id}/ausentes (D-57): productos de la
+   * marca con código que no aparecen en la importación vigente. Solo informa.
+   */
+  @Get(':id/ausentes')
+  async ausentes(
+    @Param('id', idUuid) idImportacion: string,
+    @Query() consulta: PaginacionDto,
+  ): Promise<RespuestaListaAusentes> {
+    return aRespuestaListaAusentes(
+      await this.listarAusentes.ejecutar(
+        idImportacion.toLowerCase(),
+        paginacionDe(consulta),
+      ),
+    );
+  }
+
   /** GET /api/v1/productos/importaciones/{id}/borradores */
   @Get(':id/borradores')
   async listar(
@@ -195,6 +268,10 @@ export class ImportacionesController {
             ? undefined
             : claveDeBusqueda(consulta.busqueda),
         paginaPdf: consulta.paginaPdf,
+        accion:
+          consulta.accion !== undefined && esAccionRevision(consulta.accion)
+            ? consulta.accion
+            : undefined,
         paginacion: paginacionDe(consulta),
       }),
     );

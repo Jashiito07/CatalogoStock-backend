@@ -1,6 +1,7 @@
 import { Dinero } from '../../../compartido/dominio/dinero.js';
 import {
   claveDeBusqueda,
+  claveDeEmparejamiento,
   type Disponibilidad,
   validarDescripcion,
   validarDisponibilidad,
@@ -11,6 +12,8 @@ import {
 import {
   type AdvertenciaBorrador,
   calcularAdvertencias,
+  conEmparejamiento,
+  type EmparejadoPor,
 } from './advertencias.js';
 import { BorradorNoEditableError } from './errores-importacion.js';
 import type { BorradorExtraido } from './lector-catalogo.js';
@@ -27,8 +30,18 @@ export function esEstadoBorrador(valor: unknown): valor is EstadoBorrador {
   );
 }
 
-/** Longitud máxima de la descripción de un producto (igual que `POST /productos`). */
-const LONGITUD_MAXIMA_DESCRIPCION = 2000;
+/**
+ * Producto no eliminado de la misma marca con el mismo código que un borrador
+ * pendiente (D-57): al aprobar el borrador se actualiza **solo su precio**.
+ */
+export interface ProductoExistente {
+  id: string;
+  nombre: string;
+  /** Precio actual del producto (dinero exacto, se serializa como texto). */
+  precio: Dinero;
+  /** Cómo se emparejó: por el código del catálogo o, sin código, por el nombre (D-57). */
+  emparejadoPor: EmparejadoPor;
+}
 
 export interface DatosBorrador {
   id: string;
@@ -56,8 +69,6 @@ export interface DatosNuevoBorrador {
   idImportacion: string;
   marcaId: string;
   extraido: BorradorExtraido;
-  /** Códigos ya aprobados en otra importación (`YA_IMPORTADO`). */
-  codigosYaImportados: ReadonlySet<string>;
   ahora: Date;
 }
 
@@ -86,7 +97,13 @@ export interface BorradorPublico {
   marcaId: string;
   disponibilidad: Disponibilidad;
   estado: EstadoBorrador;
+  /**
+   * Incluye las informativas de emparejamiento (D-57): `YA_IMPORTADO` (por código),
+   * `EMPAREJADO_POR_NOMBRE` o `EMPAREJAMIENTO_AMBIGUO`.
+   */
   advertencias: readonly AdvertenciaBorrador[];
+  /** Solo en un borrador `PENDIENTE` con código que ya existe en la marca (D-57); si no, `null`. */
+  productoExistente: ProductoExistente | null;
   idProducto: string | null;
 }
 
@@ -107,8 +124,6 @@ export class Borrador {
       extraido.precioNormal === null
         ? null
         : Dinero.desdeTexto(extraido.precioNormal);
-    const yaImportado =
-      extraido.codigo !== null && datos.codigosYaImportados.has(extraido.codigo);
     return new Borrador({
       id: datos.id,
       idImportacion: datos.idImportacion,
@@ -127,10 +142,7 @@ export class Borrador {
         nombre: extraido.nombre,
         precio,
         precioNormal,
-        persistentes: [
-          ...extraido.advertencias,
-          ...(yaImportado ? (['YA_IMPORTADO'] as const) : []),
-        ],
+        persistentes: extraido.advertencias,
       }),
       idProducto: null,
       creadoEn: datos.ahora,
@@ -194,6 +206,19 @@ export class Borrador {
   /** Nombre sin tildes ni mayúsculas, para buscar. */
   get nombreBusqueda(): string {
     return claveDeBusqueda(this.datos.nombre);
+  }
+
+  /**
+   * 	rue si el borrador se puede emparejar por nombre con un producto sin
+   * código (D-57): no tiene código, su nombre no es dudoso y tiene letras o
+   * dígitos. Un borrador con código solo se empareja por código.
+   */
+  get puedeEmparejarPorNombre(): boolean {
+    return (
+      this.datos.codigo === null &&
+      !this.datos.advertencias.includes('NOMBRE_DUDOSO') &&
+      claveDeEmparejamiento(this.datos.nombre) !== ''
+    );
   }
 
   get esPendiente(): boolean {
@@ -276,22 +301,12 @@ export class Borrador {
     return { borrador: new Borrador(siguiente), campos };
   }
 
-  /** Descripción del producto: la del borrador terminada en `Cód. <código>` (el producto no tiene columna de código). */
+  /**
+   * Descripción del producto que se crea: la del borrador, tal cual. El código
+   * ya no se agrega al texto: el producto tiene su propia columna `codigo` (D-57).
+   */
   descripcionParaProducto(): string {
-    const base = this.datos.descripcion ?? '';
-    if (this.datos.codigo === null) {
-      return base;
-    }
-    const sufijo = `Cód. ${this.datos.codigo}`;
-    if (base.endsWith(sufijo)) {
-      return base;
-    }
-    if (base === '') {
-      return sufijo;
-    }
-    const cupo = LONGITUD_MAXIMA_DESCRIPCION - [...sufijo].length - 1;
-    const recortada = [...base].slice(0, cupo).join('').trimEnd();
-    return `${recortada} ${sufijo}`;
+    return this.datos.descripcion ?? '';
   }
 
   /** Pasa a `APROBADO` con el producto creado. Quien llama comprueba antes que sea `PENDIENTE` y tenga precio. */
@@ -313,7 +328,19 @@ export class Borrador {
     });
   }
 
-  aPublico(): BorradorPublico {
+  /**
+   * Vista pública. `existente` es el producto con el que se empareja el
+   * borrador (D-57): por código, o por nombre si no tiene código. Solo se
+   * muestra en un borrador `PENDIENTE` (un aprobado o descartado ya no se va a
+   * actualizar) y agrega la advertencia informativa de emparejamiento.
+   * `ambiguo` (varios productos sin código con ese nombre) agrega
+   * `EMPAREJAMIENTO_AMBIGUO`.
+   */
+  aPublico(
+    existente: ProductoExistente | null = null,
+    ambiguo = false,
+  ): BorradorPublico {
+    const productoExistente = this.esPendiente ? existente : null;
     return {
       id: this.datos.id,
       idImportacion: this.datos.idImportacion,
@@ -326,7 +353,12 @@ export class Borrador {
       marcaId: this.datos.marcaId,
       disponibilidad: this.datos.disponibilidad,
       estado: this.datos.estado,
-      advertencias: this.datos.advertencias,
+      advertencias: conEmparejamiento(
+        this.datos.advertencias,
+        productoExistente?.emparejadoPor ?? null,
+        this.esPendiente && ambiguo,
+      ),
+      productoExistente,
       idProducto: this.datos.idProducto,
     };
   }

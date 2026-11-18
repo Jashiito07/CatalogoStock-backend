@@ -81,6 +81,8 @@ describe('Migración de la importación del catálogo (e2e): tablas, enumerados,
     // Con acciones nuevas en la bitácora la reversión se niega (nunca borra la
     // bitácora): la base de pruebas se vacía antes.
     await contexto.limpiar();
+    // La de los catálogos mensuales (D-57) va encima de las dos de la importación.
+    await contexto.fuente.undoLastMigration({ transaction: 'each' });
     await contexto.fuente.undoLastMigration({ transaction: 'each' });
     await contexto.fuente.undoLastMigration({ transaction: 'each' });
 

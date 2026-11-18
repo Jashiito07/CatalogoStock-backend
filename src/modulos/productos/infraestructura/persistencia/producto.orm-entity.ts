@@ -21,13 +21,22 @@ import {
  * - Eliminación lógica: `eliminado_en` con fecha; la fila se conserva (PA-07).
  * - La clave foránea a `marcas` se declara por nombre de tabla: `productos` no
  *   importa la entidad de otro módulo.
+ * - `codigo` (D-57, migración AgregarCodigoProductoYCicloImportacion): «CÓD.»
+ *   o «Ref.» del catálogo de la marca, letras y dígitos (1 a 20), nulo si no
+ *   tiene. Único por marca entre los productos **no eliminados** (índice
+ *   único parcial): un producto eliminado no bloquea el código.
  */
 @Entity('productos')
 @ForeignKey('marcas', ['idMarca'], ['id'], { name: 'fk_productos_marca' })
 @Index('ix_productos_id_marca', ['idMarca'])
 @Index('ix_productos_nombre_busqueda', ['nombreBusqueda'])
 @Index('ix_productos_eliminado_en', ['eliminadoEn'])
+@Index('uq_productos_marca_codigo', ['idMarca', 'codigo'], {
+  unique: true,
+  where: '"eliminado_en" IS NULL AND "codigo" IS NOT NULL',
+})
 @Check('ck_productos_precio', 'precio > 0')
+@Check('ck_productos_codigo', `codigo IS NULL OR codigo ~ '^[A-Za-z0-9]{1,20}$'`)
 export class ProductoOrmEntity {
   /** El id lo genera la aplicación; la columna conserva el valor por defecto. */
   @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'pk_productos' })
@@ -38,6 +47,9 @@ export class ProductoOrmEntity {
 
   @Column({ name: 'nombre_busqueda', type: 'varchar', length: 480 })
   nombreBusqueda: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  codigo: string | null;
 
   @Column({ name: 'id_marca', type: 'uuid' })
   idMarca: string;

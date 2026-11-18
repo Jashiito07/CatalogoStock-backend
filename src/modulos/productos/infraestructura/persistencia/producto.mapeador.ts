@@ -8,6 +8,7 @@ export const ProductoMapeador = {
     return Producto.reconstituir({
       id: fila.id,
       nombre: fila.nombre,
+      codigo: fila.codigo,
       marcaId: fila.idMarca,
       // `numeric` llega como texto exacto («12.50»).
       precio: Dinero.desdeTexto(fila.precio),
@@ -23,6 +24,7 @@ export const ProductoMapeador = {
     fila.id = producto.id;
     fila.nombre = producto.nombre;
     fila.nombreBusqueda = producto.nombreBusqueda;
+    fila.codigo = producto.codigo;
     fila.idMarca = producto.marcaId;
     fila.precio = producto.precio.aTexto();
     fila.descripcion = producto.descripcion;

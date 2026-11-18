@@ -38,6 +38,8 @@ export interface RespuestaMarcaResumen {
 export interface RespuestaProducto {
   id: string;
   nombre: string;
+  /** Código del catálogo de la marca o `null` (D-57). */
+  codigo: string | null;
   marca: RespuestaMarcaResumen;
   precio: string;
   descripcion: string;
@@ -62,6 +64,7 @@ export function aRespuestaProducto(
   return {
     id: producto.id,
     nombre: producto.nombre,
+    codigo: producto.codigo,
     marca: {
       id: marca.id,
       nombre: marca.nombre,
