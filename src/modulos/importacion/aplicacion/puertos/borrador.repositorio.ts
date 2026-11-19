@@ -3,7 +3,7 @@ import type {
   Paginacion,
 } from '../../../../compartido/dominio/paginacion.js';
 import type { Borrador, EstadoBorrador } from '../../dominio/borrador.js';
-import type { TotalesImportacion } from '../../dominio/importacion.js';
+import type { TotalesBorradores } from '../../dominio/importacion.js';
 
 export interface FiltroBorradores {
   idImportacion: string;
@@ -14,6 +14,20 @@ export interface FiltroBorradores {
   clave?: string;
   /** Solo los de esa página del PDF. */
   paginaPdf?: number;
+}
+
+/** Cuántos borradores pendientes hay con una marca y un código. */
+export interface PendientesPorCodigo {
+  marcaId: string;
+  codigo: string;
+  cantidad: number;
+}
+
+/** Un borrador pendiente sin código (D-57). */
+export interface PendienteSinCodigo {
+  marcaId: string;
+  nombre: string;
+  nombreDudoso: boolean;
 }
 
 /** Puerto de persistencia de borradores (tabla `borradores_producto`). */
@@ -38,10 +52,25 @@ export interface BorradorRepositorio {
     paginacion: Paginacion,
   ): Promise<Pagina<Borrador>>;
 
-  totales(idImportacion: string): Promise<TotalesImportacion>;
+  /** Como `listar`, sin paginar (mismo orden): para el filtro `accion`, que depende de los productos publicados (D-57). */
+  listarTodos(filtro: FiltroBorradores): Promise<Borrador[]>;
 
-  /** Entre `codigos`, los que ya tienen un borrador `APROBADO` (de cualquier importación). */
-  codigosAprobados(codigos: readonly string[]): Promise<Set<string>>;
+  totales(idImportacion: string): Promise<TotalesBorradores>;
+
+  /** Pendientes **con código**, agrupados por marca y código (D-57: `actualizaran` y `nuevos`). */
+  pendientesPorCodigo(idImportacion: string): Promise<PendientesPorCodigo[]>;
+
+  /**
+   * Pendientes **sin código** (D-57: emparejado por nombre): marca, nombre y si
+   * llevan `NOMBRE_DUDOSO` (esos no se emparejan).
+   */
+  pendientesSinCodigo(idImportacion: string): Promise<PendienteSinCodigo[]>;
+
+  /** Códigos distintos de **todos** los borradores de la importación, cualquiera sea su estado (D-57: `ausentes`). */
+  codigosDeImportacion(idImportacion: string): Promise<string[]>;
+
+  /** Borra los borradores de una importación; devuelve cuántos (D-57). */
+  eliminarDeImportacion(idImportacion: string): Promise<number>;
 }
 
 export const BORRADOR_REPOSITORIO = Symbol('BORRADOR_REPOSITORIO');

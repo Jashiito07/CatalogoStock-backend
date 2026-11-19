@@ -1,6 +1,7 @@
 import { crearPaginacion } from '../../../../compartido/dominio/paginacion.js';
 import { ErrorDominio, ReglaNegocioError } from '../../../../compartido/dominio/errores.js';
 import { PdfIlegibleError } from '../../dominio/errores-importacion.js';
+import { CalculadorTotalesImportacion } from '../calculador-totales.js';
 import type { BloqueTexto, PaginaTexto } from '../../dominio/texto-pagina.js';
 import { AprobarBorradoresCasoUso } from './aprobar-borradores.caso-uso.js';
 import { CrearImportacionCasoUso } from './crear-importacion.caso-uso.js';
@@ -18,6 +19,7 @@ import {
   ID_VENDEDOR,
   ImportacionRepositorioEnMemoria,
   LectorPdfFalso,
+  ProductosExistentesFalso,
   RelojFalso,
   UnidadDeTrabajoFalsa,
 } from './dobles.prueba-spec.js';
@@ -56,6 +58,7 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
   let marcas: DirectorioMarcasEnMemoria;
   let lector: LectorPdfFalso;
   let productos: CreadorProductosFalso;
+  let existentes: ProductosExistentesFalso;
   let unidad: UnidadDeTrabajoFalsa;
   let auditoria: AuditoriaFalsa;
   let crear: CrearImportacionCasoUso;
@@ -70,7 +73,8 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
     borradores = new BorradorRepositorioEnMemoria();
     marcas = new DirectorioMarcasEnMemoria();
     lector = new LectorPdfFalso([PAGINA_YANBAL]);
-    productos = new CreadorProductosFalso();
+    existentes = new ProductosExistentesFalso();
+    productos = new CreadorProductosFalso(existentes);
     unidad = new UnidadDeTrabajoFalsa();
     auditoria = new AuditoriaFalsa(unidad);
     const reloj = new RelojFalso();
@@ -84,12 +88,25 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
       reloj,
       unidad,
       auditoria,
+      new CalculadorTotalesImportacion(borradores, existentes),
     );
-    editar = new EditarBorradorCasoUso(borradores, marcas, reloj, unidad);
-    aprobar = new AprobarBorradoresCasoUso(borradores, productos, reloj, unidad, auditoria);
+    editar = new EditarBorradorCasoUso(borradores, marcas, existentes, reloj, unidad);
+    aprobar = new AprobarBorradoresCasoUso(
+      borradores,
+      productos,
+      existentes,
+      marcas,
+      reloj,
+      unidad,
+      auditoria,
+    );
     descartar = new DescartarBorradoresCasoUso(borradores, reloj, unidad, auditoria);
-    listar = new ListarBorradoresCasoUso(importaciones, borradores);
-    obtener = new ObtenerImportacionCasoUso(importaciones, borradores, marcas);
+    listar = new ListarBorradoresCasoUso(importaciones, borradores, existentes);
+    obtener = new ObtenerImportacionCasoUso(
+      importaciones,
+      new CalculadorTotalesImportacion(borradores, existentes),
+      marcas,
+    );
   });
 
   const importar = (extra: Record<string, unknown> = {}) =>
@@ -117,6 +134,9 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
         aprobados: 0,
         descartados: 0,
         conAdvertencias: 2,
+        actualizaran: 0,
+        nuevos: 3,
+        ausentes: 0,
       });
       expect(borradores.borradores.every((b) => b.marcaId === ID_MARCA_ACTIVA)).toBe(true);
       expect(borradores.borradores.every((b) => b.estado === 'PENDIENTE')).toBe(true);
@@ -208,14 +228,6 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
       expect(auditoria.registradas).toHaveLength(0);
     });
 
-    it('YA_IMPORTADO: un código aprobado en otra importación lo marca en el borrador nuevo', async () => {
-      borradores.yaAprobados.add('43873');
-
-      await importar();
-
-      expect(porCodigo('43873')?.advertencias).toContain('YA_IMPORTADO');
-      expect(porCodigo('5054')?.advertencias).not.toContain('YA_IMPORTADO');
-    });
   });
 
   describe('consultar', () => {
@@ -291,22 +303,29 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
   });
 
   describe('aprobar', () => {
-    it('RF-PRO-01: crea el producto con la descripción terminada en «Cód. <código>», marca el borrador APROBADO y registra BORRADORES_APROBADOS', async () => {
+    it('RF-PRO-01, D-57: crea el producto con su código en la columna (la descripción ya no lleva «Cód.»), marca el borrador APROBADO y registra BORRADORES_APROBADOS', async () => {
       const { importacion } = await importar();
       const borrador = porCodigo('43873')!;
 
       const resultados = await aprobar.ejecutar({ idVendedor: ID_VENDEDOR, ids: [borrador.id] });
 
       expect(resultados).toEqual([
-        { id: borrador.id, estado: 'APROBADO', idProducto: expect.any(String) },
+        {
+          id: borrador.id,
+          estado: 'APROBADO',
+          idProducto: expect.any(String),
+          accion: 'CREADO',
+          emparejadoPor: null,
+        },
       ]);
       expect(productos.creados).toEqual([
         {
           idVendedor: ID_VENDEDOR,
           nombre: 'Crema Hidratante Mani',
+          codigo: '43873',
           marcaId: ID_MARCA_ACTIVA,
           precio: '35.00',
-          descripcion: 'Cód. 43873',
+          descripcion: '',
           disponibilidad: 'DISPONIBLE',
         },
       ]);

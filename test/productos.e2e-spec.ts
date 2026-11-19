@@ -183,6 +183,7 @@ describe('Subfase 2.3 (e2e): productos (RF-PRO-01 a RF-PRO-05)', () => {
       expect(respuesta.body).toEqual({
         id: expect.stringMatching(/^[0-9a-f-]{36}$/),
         nombre: 'Crema hidratante Ésika 50 g',
+        codigo: null,
         marca: {
           id: avon.id,
           nombre: 'Avon',

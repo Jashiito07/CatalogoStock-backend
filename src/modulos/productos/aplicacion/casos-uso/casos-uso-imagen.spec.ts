@@ -36,6 +36,7 @@ function producto(id: string): Producto {
   return Producto.reconstituir({
     id,
     nombre: 'Crema',
+    codigo: null,
     marcaId: ID_MARCA_ACTIVA,
     precio: Dinero.desdeTexto('10.00'),
     descripcion: '',

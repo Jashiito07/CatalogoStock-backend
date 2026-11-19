@@ -17,6 +17,7 @@ export class CreadorProductosModuloProductos implements CreadorProductos {
     const producto = await this.productos.crear({
       idVendedor: datos.idVendedor,
       nombre: datos.nombre,
+      codigo: datos.codigo,
       marcaId: datos.marcaId,
       precio: datos.precio,
       descripcion: datos.descripcion,

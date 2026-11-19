@@ -137,6 +137,7 @@ export class ProductosController {
       await this.crearProducto.ejecutar({
         idVendedor: actor.id,
         nombre: cuerpo.nombre,
+        codigo: cuerpo.codigo,
         marcaId: cuerpo.marcaId,
         precio: cuerpo.precio,
         descripcion: cuerpo.descripcion,
@@ -158,6 +159,7 @@ export class ProductosController {
       idProducto,
       cambios: {
         nombre: cuerpo.nombre,
+        codigo: cuerpo.codigo,
         marcaId: cuerpo.marcaId,
         precio: cuerpo.precio,
         descripcion: cuerpo.descripcion,

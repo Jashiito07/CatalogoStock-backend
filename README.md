@@ -130,7 +130,8 @@ Migraciones actuales: `CrearTablaUsuarios` (1.2), `CrearTablaSesiones` (1.3),
 `CLIENTE_REACTIVADO`, D-53),
 `CrearTablasImportacionProducto` (2.8: tablas `importaciones_producto` y `borradores_producto`) y
 `AgregarAccionesImportacionAuditoria` (2.8: acciones `IMPORTACION_CREADA`, `BORRADORES_APROBADOS`,
-`BORRADORES_DESCARTADOS` y entidad `IMPORTACION`).
+`BORRADORES_DESCARTADOS` y entidad `IMPORTACION`) y `AgregarCodigoProductoYCicloImportacion` (D-57:
+`productos.codigo`, estados de importación y acción `IMPORTACION_ELIMINADA`).
 
 ## Marcas (RF-PRO-04, RF-PRO-06, RF-CAT-05, D-43, D-48)
 
@@ -234,6 +235,52 @@ propias tablas y ninguna consulta de `productos` lo incluye.
 - Los precios son `numeric(7,2)` y viajan como texto (`"35.00"`). El código admite letras y dígitos (hasta 20).
 - Las pruebas usan PDF sintéticos creados en la propia prueba y fragmentos reproducidos a mano; el PDF real de
   referencia (`Contexto/catalogos/`) **no** se versiona.
+
+### Catálogos mensuales (D-57)
+
+Los precios cambian cada mes: cada marca sube su catálogo nuevo y el sistema **actualiza** los productos. Detalle
+en la sección «Catálogos mensuales» del mismo contrato.
+
+- **Código del producto:** columna `productos.codigo` (letras y dígitos, hasta 20, opcional), única por marca entre
+  los no eliminados (índice único parcial; 409 `CODIGO_DUPLICADO`). `POST` y `PATCH /productos` lo aceptan y
+  `Producto` lo devuelve; el listado también busca por código. Al aprobar, la descripción **ya no** termina en
+  `Cód. <código>`.
+- **Actualizar precios:** un borrador con código que ya existe en un producto de la misma marca trae
+  `productoExistente` y la advertencia informativa `YA_IMPORTADO`. Al aprobar se actualiza **solo el precio**
+  (`PRODUCTO_ACTUALIZADO` con `precioAnterior` y `precioNuevo`); cada resultado trae `accion`:
+  `CREADO` | `ACTUALIZADO` | `SIN_CAMBIO` (y `emparejadoPor`: `CODIGO`, `NOMBRE` o `null` si se creó). Un producto
+  eliminado con ese código no cuenta.
+- **Borradores sin código: emparejado por nombre.** Si el borrador no tiene `codigo` ni `NOMBRE_DUDOSO`, se busca un
+  producto no eliminado de la misma marca **sin código** con el mismo nombre sin distinguir mayúsculas, tildes ni
+  signos (`claveDeEmparejamiento`: letras y dígitos separados por un espacio; en SQL se aplica sobre
+  `nombre_busqueda`, sin columna ni migración nueva). Exactamente uno → `productoExistente`, `emparejadoPor: "NOMBRE"`
+  y la advertencia informativa `EMPAREJADO_POR_NOMBRE`; al aprobar solo cambia el precio. Varios → no se empareja,
+  `EMPAREJAMIENTO_AMBIGUO` (informativa) y se crea un producto nuevo. Nunca se empareja con productos que tienen
+  código, ni un borrador con código por nombre. Así el mismo catálogo dos meses seguidos no crea repetidos de los
+  productos sin código. Al aprobar, un bloqueo asesor por marca y nombre evita que dos aprobaciones simultáneas del
+  mismo nombre creen dos productos. Estas advertencias no se guardan: se deducen al leer. `totales.actualizaran` y
+  `nuevos` también cuentan este emparejado.
+- **Filtro `accion`** en `GET .../{id}/borradores`: `ACTUALIZAR` (con `productoExistente`), `NUEVO` (crearán un
+  producto) o `CAMBIO_PRECIO` (actualizarán un precio que cambia; excluye `SIN_CAMBIO`); otro valor → 400. Se combina
+  con `estado`, `conAdvertencias`, `busqueda` (nombre o código del borrador), `paginaPdf` y la paginación, que con
+  este filtro se corta en el servidor después de emparejar. Solo los pendientes cumplen una acción.
+- **Ciclo de vida:** la importación más reciente de cada marca es `VIGENTE`; al subir otra de la misma marca la
+  anterior pasa a `ARCHIVADA` (`archivadaEn`, `eliminaEn` = +6 meses calendario). `totales` suma `actualizaran`,
+  `nuevos` y `ausentes` (productos de la marca con código que no vienen en el catálogo; 0 en una archivada).
+- **Rutas nuevas:** `GET /productos/importaciones` (lista paginada, `estado`, `marcaId`),
+  `GET /productos/importaciones/{id}/ausentes` (solo informativo; 422 `IMPORTACION_ARCHIVADA`) y
+  `DELETE /productos/importaciones/{id}` (204; borra importación y borradores, nunca productos; libera la huella).
+- **Retención automática:** un planificador interno del servidor (sin dependencias nuevas) elimina las
+  importaciones archivadas hace 6 meses calendario, al arrancar y cada 24 h, en lotes pequeños y con transacción
+  por importación (idempotente con varias instancias). Bitácora `IMPORTACION_ELIMINADA`
+  (`{ idImportacion, motivo: MANUAL | RETENCION, borradores }`; usuario nulo en `RETENCION`). Se apaga con
+  `RETENCION_IMPORTACIONES_ACTIVA=false` (las pruebas e2e lo hacen y usan un reloj controlado).
+- **Migración** `AgregarCodigoProductoYCicloImportacion`: aditiva y con `down()`; rellena `codigo` desde el sufijo
+  `Cód. <código>` de la descripción (y lo quita); de las importaciones existentes, la más reciente por marca queda
+  `VIGENTE` y el resto `ARCHIVADA`. Si dos productos no eliminados de la marca repiten código, solo el más antiguo
+  recibe la columna.
+- `ImportacionModule` se declara **antes** que `ProductosModule` en `AppModule` para que `GET /productos/importaciones`
+  gane a `GET /productos/:id`.
 
 ## Recuperación y cambio de clave (RF-USU-05, D-35, D-39)
 

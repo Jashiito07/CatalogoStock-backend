@@ -1,5 +1,5 @@
 import { ImportacionNoEncontradaError } from '../../dominio/errores-importacion.js';
-import type { BorradorRepositorio } from '../puertos/borrador.repositorio.js';
+import type { CalculadorTotalesImportacion } from '../calculador-totales.js';
 import type { DirectorioMarcas } from '../puertos/directorio-marcas.puerto.js';
 import type { ImportacionRepositorio } from '../puertos/importacion.repositorio.js';
 import type { VistaImportacion } from '../vista-importacion.js';
@@ -8,7 +8,7 @@ import type { VistaImportacion } from '../vista-importacion.js';
 export class ObtenerImportacionCasoUso {
   constructor(
     private readonly importaciones: ImportacionRepositorio,
-    private readonly borradores: BorradorRepositorio,
+    private readonly totales: CalculadorTotalesImportacion,
     private readonly marcas: DirectorioMarcas,
   ) {}
 
@@ -25,7 +25,7 @@ export class ObtenerImportacionCasoUso {
     return {
       importacion,
       marca,
-      totales: await this.borradores.totales(importacion.id),
+      totales: await this.totales.calcular(importacion),
     };
   }
 }

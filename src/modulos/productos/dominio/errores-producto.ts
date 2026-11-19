@@ -1,7 +1,15 @@
 import {
+  ConflictoError,
   NoEncontradoError,
   ReglaNegocioError,
 } from '../../../compartido/dominio/errores.js';
+
+/** Ya hay un producto con ese código en la marca (409 `CODIGO_DUPLICADO`, D-57). */
+export class CodigoDuplicadoError extends ConflictoError {
+  constructor() {
+    super('CODIGO_DUPLICADO', 'Ya existe un producto con ese código en la marca.');
+  }
+}
 
 /** El producto no existe o fue eliminado (404 `NO_ENCONTRADO`, PA-07). */
 export class ProductoNoEncontradoError extends NoEncontradoError {

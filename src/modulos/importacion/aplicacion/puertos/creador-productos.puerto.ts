@@ -3,6 +3,8 @@ export interface DatosProductoAprobado {
   /** Vendedor del token (queda en el `PRODUCTO_CREADO` habitual). */
   idVendedor: string;
   nombre: string;
+  /** «CÓD.»/«Ref.» del catálogo o `null` (D-57: columna `codigo` del producto). */
+  codigo: string | null;
   marcaId: string;
   /** Texto decimal exacto (`"35.00"`). */
   precio: string;
@@ -16,7 +18,8 @@ export interface DatosProductoAprobado {
  * adaptador usa el servicio público de `productos`; si se llama dentro de una
  * unidad de trabajo, se une a su transacción.
  *
- * Falla con un error de dominio (`MARCA_INACTIVA`, `DATOS_INVALIDOS`.).
+ * Falla con un error de dominio (`MARCA_INACTIVA`, `DATOS_INVALIDOS`,
+ * `CODIGO_DUPLICADO`…).
  */
 export interface CreadorProductos {
   /** Devuelve el id del producto creado. */

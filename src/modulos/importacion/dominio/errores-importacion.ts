@@ -69,6 +69,16 @@ export class ImportacionDuplicadaError extends ConflictoError {
   }
 }
 
+/** `ausentes` solo tiene sentido en la importación vigente (422 `IMPORTACION_ARCHIVADA`, D-57). */
+export class ImportacionArchivadaError extends ReglaNegocioError {
+  constructor() {
+    super(
+      'IMPORTACION_ARCHIVADA',
+      'La importación está archivada: los productos ausentes solo se consultan en la vigente.',
+    );
+  }
+}
+
 /** Solo un borrador `PENDIENTE` se puede editar (422 `BORRADOR_NO_EDITABLE`). */
 export class BorradorNoEditableError extends ReglaNegocioError {
   constructor() {

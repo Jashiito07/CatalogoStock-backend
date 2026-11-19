@@ -152,6 +152,19 @@ export class VariablesEntorno {
   RUTA_ALMACENAMIENTO: string = RUTA_ALMACENAMIENTO_POR_DEFECTO;
 
   /**
+   * Retención automática de importaciones archivadas (D-57): con `true` (por
+   * defecto) el servidor elimina, al arrancar y cada 24 horas, las
+   * importaciones archivadas hace más de 6 meses calendario (sus borradores,
+   * nunca los productos). Las pruebas e2e la apagan (`false`).
+   */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean({ message: 'RETENCION_IMPORTACIONES_ACTIVA debe ser true o false' })
+  RETENCION_IMPORTACIONES_ACTIVA: boolean = true;
+
+  /**
    * Interruptor del envío de correo (verificación del correo y recuperación de
    * clave, D-50). Obligatorio: `true` envía por SMTP; `false` no envía nada
    * (solo deja en el log que se omitió el envío, sin destinatario ni código) y

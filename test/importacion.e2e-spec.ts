@@ -39,8 +39,14 @@ interface CuerpoImportacion {
     aprobados: number;
     descartados: number;
     conAdvertencias: number;
+    actualizaran: number;
+    nuevos: number;
+    ausentes: number;
   };
+  estado: string;
   creadaEn: string;
+  archivadaEn: string | null;
+  eliminaEn: string | null;
 }
 
 interface CuerpoBorrador {
@@ -57,6 +63,7 @@ interface CuerpoBorrador {
   estado: string;
   advertencias: string[];
   idProducto: string | null;
+  productoExistente?: { id: string; nombre: string; precio: string } | null;
 }
 
 interface CuerpoLista {
@@ -223,8 +230,19 @@ describe('Subfase 2.8 (e2e): importación asistida del catálogo en PDF (RF-PRO-
         nombreArchivo: 'Catálogo Yanbal.pdf',
         marca: expect.objectContaining({ id: marcaId, nombre: 'Yanbal' }),
         paginas: 1,
-        totales: { pendientes: 3, aprobados: 0, descartados: 0, conAdvertencias: 2 },
+        estado: 'VIGENTE',
+        totales: {
+          pendientes: 3,
+          aprobados: 0,
+          descartados: 0,
+          conAdvertencias: 2,
+          actualizaran: 0,
+          nuevos: 3,
+          ausentes: 0,
+        },
         creadaEn: expect.any(String),
+        archivadaEn: null,
+        eliminaEn: null,
       });
       const lista = await borradores(importacion.id);
       expect(lista).toMatchObject({ pagina: 1, tamanio: 20, total: 3 });
@@ -647,7 +665,7 @@ describe('Subfase 2.8 (e2e): importación asistida del catálogo en PDF (RF-PRO-
   });
 
   describe('POST /productos/importaciones/borradores/aprobar', () => {
-    it('RF-PRO-01: crea el producto con las mismas validaciones y la descripción termina con «Cód. <código>»; PRODUCTO_CREADO y BORRADORES_APROBADOS en la bitácora', async () => {
+    it('RF-PRO-01: crea el producto con las mismas validaciones y el código va en su columna (D-57); PRODUCTO_CREADO y BORRADORES_APROBADOS en la bitácora', async () => {
       const importacion = await importarOk();
       const borrador = await borradorDe(importacion.id, '43873');
       await comoVendedor(http().patch(`${RUTA}/borradores/${borrador.id}`))
@@ -661,6 +679,8 @@ describe('Subfase 2.8 (e2e): importación asistida del catálogo en PDF (RF-PRO-
         id: borrador.id,
         estado: 'APROBADO',
         idProducto: expect.stringMatching(/^[0-9a-f-]{36}$/),
+        accion: 'CREADO',
+        emparejadoPor: null,
       });
       const producto = (
         await comoCliente(
@@ -670,7 +690,8 @@ describe('Subfase 2.8 (e2e): importación asistida del catálogo en PDF (RF-PRO-
       expect(producto).toMatchObject({
         nombre: 'Crema Hidratante Mani',
         precio: '35.00',
-        descripcion: 'Cont. 50 ml Cód. 43873',
+        codigo: '43873',
+        descripcion: 'Cont. 50 ml',
         disponibilidad: 'DISPONIBLE',
         marca: { id: marcaId },
       });
@@ -692,7 +713,7 @@ describe('Subfase 2.8 (e2e): importación asistida del catálogo en PDF (RF-PRO-
       });
     });
 
-    it('un borrador de Leonisa aprobado lleva las referencias en la descripción y «Cód. <primera referencia>» al final', async () => {
+    it('un borrador de Leonisa aprobado lleva las referencias en la descripción y la primera referencia en la columna codigo (D-57)', async () => {
       const importacion = await importarOk(crearPdfLeonisaSintetico());
       const borrador = await borradorDe(importacion.id, '091183');
 
@@ -704,8 +725,10 @@ describe('Subfase 2.8 (e2e): importación asistida del catálogo en PDF (RF-PRO-
         await comoVendedor(http().get(`${RUTA_PRODUCTOS}/${idProducto}`)).expect(200)
       ).body;
       expect(producto.descripcion).toMatch(
-        /^Con arco\. Varillas laterales\..*Ref\. 091183 \/ Copa B.*Ref\. 091183C \/ Copa C.* Cód\. 091183$/,
+        /^Con arco\. Varillas laterales\..*Ref\. 091183 \/ Copa B.*Ref\. 091183C \/ Copa C.*\.$/,
       );
+      expect(producto.descripcion).not.toContain('Cód.');
+      expect(producto.codigo).toBe('091183');
     });
 
     it('idempotente: aprobar dos veces no duplica el producto (la segunda responde NO_PENDIENTE)', async () => {
@@ -773,9 +796,9 @@ describe('Subfase 2.8 (e2e): importación asistida del catálogo en PDF (RF-PRO-
       const respuesta = await aprobar([buenoUno.id, malo.id, buenoDos.id]).expect(200);
 
       expect((respuesta.body as CuerpoResultados).resultados).toEqual([
-        { id: buenoUno.id, estado: 'APROBADO', idProducto: expect.any(String) },
+        { id: buenoUno.id, estado: 'APROBADO', idProducto: expect.any(String), accion: 'CREADO', emparejadoPor: null },
         { id: malo.id, error: 'MARCA_INACTIVA' },
-        { id: buenoDos.id, estado: 'APROBADO', idProducto: expect.any(String) },
+        { id: buenoDos.id, estado: 'APROBADO', idProducto: expect.any(String), accion: 'CREADO', emparejadoPor: null },
       ]);
       expect(await contar('productos')).toBe(2);
       expect(await auditoria('PRODUCTO_CREADO')).toHaveLength(2);
@@ -841,6 +864,9 @@ describe('Subfase 2.8 (e2e): importación asistida del catálogo en PDF (RF-PRO-
         aprobados: 0,
         descartados: 1,
         conAdvertencias: 2,
+        actualizaran: 0,
+        nuevos: 2,
+        ausentes: 0,
       });
     });
   });
@@ -889,8 +915,8 @@ describe('Subfase 2.8 (e2e): importación asistida del catálogo en PDF (RF-PRO-
     });
   });
 
-  describe('YA_IMPORTADO', () => {
-    it('un código aprobado en otra importación marca el borrador nuevo con YA_IMPORTADO', async () => {
+  describe('YA_IMPORTADO (D-57)', () => {
+    it('un código ya publicado en la marca marca el borrador nuevo con YA_IMPORTADO', async () => {
       const primera = await importarOk();
       const { id } = await borradorDe(primera.id, '43873');
       await aprobar([id]).expect(200);
@@ -911,8 +937,10 @@ describe('Subfase 2.8 (e2e): importación asistida del catálogo en PDF (RF-PRO-
       );
 
       const repetido = await borradorDe(segunda.id, '43873');
+      // D-57: ahora es informativa y trae el producto que se actualizará.
       expect(repetido.advertencias).toEqual(['YA_IMPORTADO']);
-      expect(segunda.totales.conAdvertencias).toBe(1);
+      expect(repetido.productoExistente).toMatchObject({ nombre: 'Crema Hidratante Mani', precio: '35.00' });
+      expect(segunda.totales.conAdvertencias).toBe(0);
     });
   });
 });

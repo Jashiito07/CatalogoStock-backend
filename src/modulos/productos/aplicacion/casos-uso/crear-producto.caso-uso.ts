@@ -15,6 +15,8 @@ export interface DatosCrearProducto {
   /** Vendedor del token (ya verificado por `@Roles('VENDEDOR')`). */
   idVendedor: string;
   nombre: unknown;
+  /** Código del catálogo (opcional, D-57); 409 `CODIGO_DUPLICADO` si ya existe en la marca. */
+  codigo?: unknown;
   marcaId: unknown;
   precio: unknown;
   descripcion?: unknown;
@@ -41,6 +43,7 @@ export class CrearProductoCasoUso {
       const producto = Producto.crear({
         id: this.generadorId.generar(),
         nombre: datos.nombre,
+        codigo: datos.codigo,
         marcaId: datos.marcaId,
         precio: datos.precio,
         descripcion: datos.descripcion,

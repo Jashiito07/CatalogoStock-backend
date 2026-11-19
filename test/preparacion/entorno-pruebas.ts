@@ -37,6 +37,9 @@ const VALORES_FIJOS: Readonly<Record<string, string>> = {
   // transporte por uno falso en memoria. Las pruebas nunca envían correos
   // reales ni leen credenciales SMTP.
   CORREO_ACTIVO: 'false',
+  // D-57: la retención automática de importaciones va apagada; las pruebas
+  // llaman al caso de uso con un reloj controlado.
+  RETENCION_IMPORTACIONES_ACTIVA: 'false',
   // Carpeta TEMPORAL del sistema: las pruebas nunca escriben en la carpeta de
   // desarrollo (`./almacenamiento`). Cada suite que sube archivos la borra al terminar.
   RUTA_ALMACENAMIENTO: join(tmpdir(), 'catalogostock-e2e-almacenamiento'),
