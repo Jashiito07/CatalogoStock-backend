@@ -96,6 +96,27 @@ import { GeneradorTokenRenovacionCrypto } from './infraestructura/seguridad/gene
 import { AutenticacionController } from './presentacion/http/autenticacion.controller.js';
 import { PrivacidadController } from './presentacion/http/privacidad.controller.js';
 import { UsuariosController } from './presentacion/http/usuarios.controller.js';
+import { TiendaController } from './presentacion/http/tienda.controller.js';
+import { EliminadorCuenta } from './aplicacion/eliminador-cuenta.js';
+import { EliminarCuentaCasoUso } from './aplicacion/casos-uso/eliminar-cuenta.caso-uso.js';
+import { EliminarCuentaPorCodigoCasoUso } from './aplicacion/casos-uso/eliminar-cuenta-por-codigo.caso-uso.js';
+import { SolicitarEliminacionCuentaCasoUso } from './aplicacion/casos-uso/solicitar-eliminacion-cuenta.caso-uso.js';
+import {
+  ConsultarTiendaCasoUso,
+  GuardarPerfilVendedorCasoUso,
+  ObtenerPerfilVendedorCasoUso,
+} from './aplicacion/casos-uso/perfil-vendedor.caso-uso.js';
+import {
+  LIMITE_ELIMINACION_CUENTA,
+  type LimiteEliminacionCuenta,
+} from './aplicacion/puertos/limite-eliminacion-cuenta.puerto.js';
+import {
+  PERFIL_VENDEDOR_REPOSITORIO,
+  type PerfilVendedorRepositorio,
+} from './aplicacion/puertos/perfil-vendedor.repositorio.js';
+import { PerfilVendedorOrmEntity } from './infraestructura/persistencia/perfil-vendedor.orm-entity.js';
+import { PerfilVendedorRepositorioTypeorm } from './infraestructura/persistencia/perfil-vendedor.repositorio.typeorm.js';
+import { LimiteEliminacionCuentaMemoria } from './infraestructura/seguridad/limite-eliminacion-cuenta.memoria.js';
 
 type Configuracion = ConfigService<VariablesEntorno, true>;
 
@@ -121,6 +142,7 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
       UsuarioOrmEntity,
       SesionOrmEntity,
       CodigoRecuperacionOrmEntity,
+      PerfilVendedorOrmEntity,
     ]),
     // 1.5: registrar actividades en la bitácora (RF-USU-04).
     AuditoriaModule,
@@ -137,6 +159,7 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
     UsuariosController,
     AutenticacionController,
     PrivacidadController,
+    TiendaController,
   ],
   providers: [
     { provide: USUARIO_REPOSITORIO, useClass: UsuarioRepositorioTypeorm },
@@ -575,6 +598,169 @@ type Configuracion = ConfigService<VariablesEntorno, true>;
           unidadTrabajo,
           auditoria,
         ),
+    },
+    // RF-USU-06 (contrato cuenta-y-politicas): eliminar la cuenta por la app
+    // (con la clave) y por la web (con un código al correo).
+    {
+      provide: LIMITE_ELIMINACION_CUENTA,
+      useFactory: () => new LimiteEliminacionCuentaMemoria(),
+    },
+    {
+      provide: EliminadorCuenta,
+      inject: [
+        USUARIO_REPOSITORIO,
+        SESION_REPOSITORIO,
+        CODIGO_RECUPERACION_REPOSITORIO,
+        GENERADOR_HASH,
+        GENERADOR_TOKEN_RENOVACION,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        sesiones: SesionRepositorio,
+        codigos: CodigoRecuperacionRepositorio,
+        generadorHash: GeneradorHash,
+        generadorToken: GeneradorTokenRenovacion,
+        reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
+      ) =>
+        new EliminadorCuenta(
+          usuarios,
+          sesiones,
+          codigos,
+          generadorHash,
+          generadorToken,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
+    },
+    {
+      provide: EliminarCuentaCasoUso,
+      inject: [
+        USUARIO_REPOSITORIO,
+        GENERADOR_HASH,
+        LIMITE_ELIMINACION_CUENTA,
+        EliminadorCuenta,
+        RELOJ,
+      ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        generadorHash: GeneradorHash,
+        limite: LimiteEliminacionCuenta,
+        eliminador: EliminadorCuenta,
+        reloj: Reloj,
+      ) =>
+        new EliminarCuentaCasoUso(
+          usuarios,
+          generadorHash,
+          limite,
+          eliminador,
+          reloj,
+        ),
+    },
+    {
+      provide: SolicitarEliminacionCuentaCasoUso,
+      inject: [
+        USUARIO_REPOSITORIO,
+        CODIGO_RECUPERACION_REPOSITORIO,
+        PROTECTOR_CODIGO_RECUPERACION,
+        ENVIADOR_CORREO,
+        GENERADOR_ID,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        codigos: CodigoRecuperacionRepositorio,
+        protector: ProtectorCodigoRecuperacion,
+        enviador: EnviadorCorreo,
+        generadorId: GeneradorId,
+        reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
+      ) =>
+        new SolicitarEliminacionCuentaCasoUso(
+          usuarios,
+          codigos,
+          protector,
+          enviador,
+          generadorId,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
+    },
+    {
+      provide: EliminarCuentaPorCodigoCasoUso,
+      inject: [
+        USUARIO_REPOSITORIO,
+        CODIGO_RECUPERACION_REPOSITORIO,
+        PROTECTOR_CODIGO_RECUPERACION,
+        EliminadorCuenta,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+      ],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        codigos: CodigoRecuperacionRepositorio,
+        protector: ProtectorCodigoRecuperacion,
+        eliminador: EliminadorCuenta,
+        reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+      ) =>
+        new EliminarCuentaPorCodigoCasoUso(
+          usuarios,
+          codigos,
+          protector,
+          eliminador,
+          reloj,
+          unidadTrabajo,
+        ),
+    },
+    // RF-USU-08: perfil comercial del Vendedor y `GET /tienda`.
+    {
+      provide: PERFIL_VENDEDOR_REPOSITORIO,
+      useClass: PerfilVendedorRepositorioTypeorm,
+    },
+    {
+      provide: ObtenerPerfilVendedorCasoUso,
+      inject: [PERFIL_VENDEDOR_REPOSITORIO],
+      useFactory: (perfiles: PerfilVendedorRepositorio) =>
+        new ObtenerPerfilVendedorCasoUso(perfiles),
+    },
+    {
+      provide: GuardarPerfilVendedorCasoUso,
+      inject: [
+        PERFIL_VENDEDOR_REPOSITORIO,
+        RELOJ,
+        UNIDAD_DE_TRABAJO,
+        SERVICIO_AUDITORIA,
+      ],
+      useFactory: (
+        perfiles: PerfilVendedorRepositorio,
+        reloj: Reloj,
+        unidadTrabajo: UnidadDeTrabajo,
+        auditoria: ServicioAuditoria,
+      ) =>
+        new GuardarPerfilVendedorCasoUso(
+          perfiles,
+          reloj,
+          unidadTrabajo,
+          auditoria,
+        ),
+    },
+    {
+      provide: ConsultarTiendaCasoUso,
+      inject: [USUARIO_REPOSITORIO, PERFIL_VENDEDOR_REPOSITORIO],
+      useFactory: (
+        usuarios: UsuarioRepositorio,
+        perfiles: PerfilVendedorRepositorio,
+      ) => new ConsultarTiendaCasoUso(usuarios, perfiles),
     },
     // Contrato usuarios-gestion (D-53): desactivar y reactivar clientes.
     {

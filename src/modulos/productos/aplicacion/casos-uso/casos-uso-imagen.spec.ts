@@ -35,6 +35,7 @@ const JPG = () => conFirma([0xff, 0xd8, 0xff, 0xe0]);
 function producto(id: string): Producto {
   return Producto.reconstituir({
     id,
+    idVendedor: ID_VENDEDOR,
     nombre: 'Crema',
     codigo: null,
     marcaId: ID_MARCA_ACTIVA,
@@ -161,7 +162,7 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
       await expect(subir(PNG(), ID_INEXISTENTE)).rejects.toMatchObject({
         codigo: 'NO_ENCONTRADO',
       });
-      await productos.marcarEliminado(ID_PRODUCTO);
+      await productos.marcarEliminado(ID_PRODUCTO, ID_VENDEDOR);
       await expect(subir()).rejects.toMatchObject({ codigo: 'NO_ENCONTRADO' });
       expect(almacen.archivos.size).toBe(0);
     });
@@ -216,6 +217,7 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
       const b = await subir(PNG());
 
       const resultado = await reordenar.ejecutar({
+        idVendedor: ID_VENDEDOR,
         idProducto: ID_PRODUCTO,
         ids: [b.id, a.id],
       });
@@ -233,7 +235,11 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
 
       for (const ids of [[a.id], [a.id, b.id, ajena.id], [a.id, a.id]]) {
         await expect(
-          reordenar.ejecutar({ idProducto: ID_PRODUCTO, ids }),
+          reordenar.ejecutar({
+            idVendedor: ID_VENDEDOR,
+            idProducto: ID_PRODUCTO,
+            ids,
+          }),
         ).rejects.toMatchObject({ codigo: 'DATOS_INVALIDOS' });
       }
       expect(
@@ -243,7 +249,11 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
 
     it('producto inexistente → NO_ENCONTRADO', async () => {
       await expect(
-        reordenar.ejecutar({ idProducto: ID_INEXISTENTE, ids: [] }),
+        reordenar.ejecutar({
+          idVendedor: ID_VENDEDOR,
+          idProducto: ID_INEXISTENTE,
+          ids: [],
+        }),
       ).rejects.toMatchObject({ codigo: 'NO_ENCONTRADO' });
     });
   });
@@ -309,7 +319,11 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
     it('consultar devuelve un mapa con todos los productos pedidos y sus imágenes ordenadas', async () => {
       const a = await subir(JPG());
       const b = await subir(PNG());
-      await reordenar.ejecutar({ idProducto: ID_PRODUCTO, ids: [b.id, a.id] });
+      await reordenar.ejecutar({
+        idVendedor: ID_VENDEDOR,
+        idProducto: ID_PRODUCTO,
+        ids: [b.id, a.id],
+      });
 
       const mapa = await consultar.porProductos([
         ID_PRODUCTO,

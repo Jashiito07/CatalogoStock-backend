@@ -15,7 +15,13 @@ import { ROLES, type Rol } from '../../dominio/rol.js';
   where: `rol = 'VENDEDOR'`,
 })
 @Check('ck_usuarios_correo_minusculas', 'correo = lower(correo)')
-@Check('ck_usuarios_telefono_celular_ecuador', `telefono ~ '^\\+5939[0-9]{8}$'`)
+// RF-USU-06: una cuenta eliminada queda con un teléfono anonimizado (`+000` y
+// 9 dígitos, no es un celular válido) y siempre inactiva.
+@Check(
+  'ck_usuarios_telefono_celular_ecuador',
+  `telefono ~ '^\\+5939[0-9]{8}$' OR (eliminado_en IS NOT NULL AND telefono ~ '^\\+000[0-9]{9}$')`,
+)
+@Check('ck_usuarios_eliminado_inactivo', 'eliminado_en IS NULL OR activo = false')
 @Check(
   'ck_usuarios_privacidad_cliente',
   `rol = 'VENDEDOR' OR (fecha_aceptacion_privacidad IS NOT NULL AND version_privacidad IS NOT NULL)`,
@@ -71,6 +77,14 @@ export class UsuarioOrmEntity {
    */
   @Column({ name: 'correo_verificado_en', type: 'timestamptz', nullable: true })
   correoVerificadoEn: Date | null;
+
+  /**
+   * Cuándo se eliminó la cuenta (RF-USU-06, PA-21): sus datos personales se
+   * anonimizaron y la fila se conserva para los pedidos, pagos y la bitácora
+   * que la referencian. `null`: cuenta vigente.
+   */
+  @Column({ name: 'eliminado_en', type: 'timestamptz', nullable: true })
+  eliminadoEn: Date | null;
 
   @Column({
     name: 'fecha_creacion',

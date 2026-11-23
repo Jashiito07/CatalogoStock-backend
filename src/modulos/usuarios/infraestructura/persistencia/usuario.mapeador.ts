@@ -12,13 +12,18 @@ export const UsuarioMapeador = {
       id: fila.id,
       nombre: NombreUsuario.crear(fila.nombre),
       correo: Correo.crear(fila.correo),
-      telefono: Telefono.crear(fila.telefono),
+      // Una cuenta eliminada guarda un teléfono anonimizado (RF-USU-06).
+      telefono:
+        fila.eliminadoEn === null
+          ? Telefono.crear(fila.telefono)
+          : Telefono.deCuentaEliminada(fila.telefono),
       hashClave: fila.hashClave,
       rol: crearRol(fila.rol),
       activo: fila.activo,
       privacidadAceptadaEn: fila.fechaAceptacionPrivacidad,
       versionPrivacidad: fila.versionPrivacidad,
       correoVerificadoEn: fila.correoVerificadoEn,
+      eliminadoEn: fila.eliminadoEn,
       creadoEn: fila.fechaCreacion,
       actualizadoEn: fila.fechaActualizacion,
     });
@@ -36,6 +41,7 @@ export const UsuarioMapeador = {
     fila.fechaAceptacionPrivacidad = usuario.privacidadAceptadaEn;
     fila.versionPrivacidad = usuario.versionPrivacidad;
     fila.correoVerificadoEn = usuario.correoVerificadoEn;
+    fila.eliminadoEn = usuario.eliminadoEn;
     fila.fechaCreacion = usuario.creadoEn;
     fila.fechaActualizacion = usuario.actualizadoEn;
     return fila;

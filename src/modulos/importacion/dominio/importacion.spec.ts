@@ -6,10 +6,22 @@ import {
 
 const ID = '00000000-0000-4000-8000-000000000001';
 const MARCA = '00000000-0000-4000-8000-0000000000b1';
+const VENDEDOR = '00000000-0000-4000-8000-0000000000aa';
+const OTRO_VENDEDOR = '00000000-0000-4000-8000-0000000000ab';
+
+describe('D-60: dueño de la importación', () => {
+  it('pertenece solo al Vendedor que la creó', () => {
+    const creada = importacion();
+    expect(creada.idVendedor).toBe(VENDEDOR);
+    expect(creada.perteneceA(VENDEDOR)).toBe(true);
+    expect(creada.perteneceA(OTRO_VENDEDOR)).toBe(false);
+  });
+});
 
 function importacion(): Importacion {
   return Importacion.crear({
     id: ID,
+    idVendedor: VENDEDOR,
     nombreArchivo: 'catalogo.pdf',
     huella: 'a'.repeat(64),
     marcaId: MARCA,

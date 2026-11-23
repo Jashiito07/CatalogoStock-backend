@@ -12,6 +12,8 @@ import type { ImportacionRepositorio } from '../puertos/importacion.repositorio.
 import type { ProductosExistentes } from '../puertos/productos-existentes.puerto.js';
 
 export interface ConsultaBorradores {
+  /** Vendedor del token: solo consulta borradores de sus importaciones (D-60). */
+  idVendedor: string;
   idImportacion: string;
   /** Por defecto `PENDIENTE`. */
   estado?: EstadoBorrador;
@@ -47,7 +49,8 @@ export class ListarBorradoresCasoUso {
     const importacion = await this.importaciones.buscarPorId(
       consulta.idImportacion,
     );
-    if (importacion === null) {
+    // D-60: la de otro Vendedor responde 404.
+    if (importacion === null || !importacion.perteneceA(consulta.idVendedor)) {
       throw new ImportacionNoEncontradaError();
     }
     const filtro = {
@@ -60,7 +63,11 @@ export class ListarBorradoresCasoUso {
 
     if (consulta.accion === undefined) {
       const pagina = await this.borradores.listar(filtro, consulta.paginacion);
-      const emparejados = await emparejarBorradores(pagina.elementos, this.productos);
+      const emparejados = await emparejarBorradores(
+        consulta.idVendedor,
+        pagina.elementos,
+        this.productos,
+      );
       return {
         ...pagina,
         elementos: pagina.elementos.map((borrador) => {
@@ -71,7 +78,11 @@ export class ListarBorradoresCasoUso {
     }
 
     const todos = await this.borradores.listarTodos(filtro);
-    const emparejados = await emparejarBorradores(todos, this.productos);
+    const emparejados = await emparejarBorradores(
+      consulta.idVendedor,
+      todos,
+      this.productos,
+    );
     const accion = consulta.accion;
     const coinciden = todos.filter((borrador) =>
       cumpleAccion(accion, borrador, emparejados.get(borrador.id)?.existente ?? null),

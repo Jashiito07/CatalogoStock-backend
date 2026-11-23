@@ -16,6 +16,8 @@ export class HuellaDuplicadaError extends Error {
 }
 
 export interface FiltroImportaciones {
+  /** Solo las importaciones de este Vendedor (D-60). */
+  idVendedor: string;
   estado?: EstadoImportacion;
   marcaId?: string;
 }
@@ -34,14 +36,23 @@ export interface ImportacionRepositorio {
    */
   bloquearPorId(id: string): Promise<Importacion | null>;
 
-  buscarPorHuella(huella: string): Promise<Importacion | null>;
+  /** La importación **del Vendedor** con esa huella (D-60: la de otro Vendedor no cuenta). */
+  buscarPorHuella(
+    idVendedor: string,
+    huella: string,
+  ): Promise<Importacion | null>;
 
   /**
    * Pasa a `ARCHIVADA` (con `archivadaEn = ahora`) las importaciones `VIGENTE`
-   * de la marca. Serializa las subidas simultáneas de la misma marca para que
-   * nunca haya dos vigentes (D-57). Devuelve cuántas archivó.
+   * del Vendedor en la marca. Serializa las subidas simultáneas del mismo
+   * Vendedor y marca para que nunca haya dos vigentes (D-57, D-60). Devuelve
+   * cuántas archivó.
    */
-  archivarVigentesDeMarca(marcaId: string, ahora: Date): Promise<number>;
+  archivarVigentesDeMarca(
+    idVendedor: string,
+    marcaId: string,
+    ahora: Date,
+  ): Promise<number>;
 
   /** Más reciente primero (`fecha_creacion` descendente y luego id). */
   listar(

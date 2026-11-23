@@ -46,8 +46,19 @@ describe('D-17: límite de intentos por IP', () => {
       CAMBIO_CLAVE: { limite: 5, ventanaMs: 60_000 },
       SOLICITUD_CODIGO_CORREO: { limite: 3, ventanaMs: 60_000 },
       CONFIRMACION_CORREO: { limite: 5, ventanaMs: 60_000 },
+      SOLICITUD_ELIMINACION_CUENTA: { limite: 3, ventanaMs: 60_000 },
+      ELIMINACION_CUENTA: { limite: 5, ventanaMs: 60_000 },
       SUBIDA_IMAGENES: { limite: 30, ventanaMs: 60_000 },
       IMPORTACION_PDF: { limite: 5, ventanaMs: 3_600_000 },
+    });
+    // RF-USU-06 (contrato cuenta-y-politicas): eliminar la cuenta desde la web.
+    expect(limitador('SOLICITUD_ELIMINACION_CUENTA')).toMatchObject({
+      limit: 3,
+      ttl: 60_000,
+    });
+    expect(limitador('ELIMINACION_CUENTA')).toMatchObject({
+      limit: 5,
+      ttl: 60_000,
     });
     expect(limitador('SOLICITUD_CODIGO_CORREO')).toMatchObject({
       limit: 3,

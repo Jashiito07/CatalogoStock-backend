@@ -55,6 +55,7 @@ inválida, la API no inicia y el error solo nombra la variable, nunca su valor.
 | `JWT_VIDA_ACCESO_SEGUNDOS` | Opcional. Vida del token de acceso (60 a 3600; por defecto 900 = 15 min, D-09) | `900` |
 | `RENOVACION_VIDA_DIAS` | Opcional. Vida del token de renovación (1 a 30; por defecto 7, D-09) | `7` |
 | `RECUPERACION_SECRETO` | Secreto del HMAC-SHA256 de los códigos de recuperación (RF-USU-05). Mínimo 32 caracteres aleatorios, distinto de `JWT_SECRETO` | ver `.env.example` |
+| `URL_PUBLICA` | Dirección pública de la API, sin barra final; arma las URL de `GET /api/v1/politicas` (RF-USU-07). **Obligatoria y con `https://` en producción** (`NODE_ENV=production`); en desarrollo vale `http://localhost:3000` | `http://localhost:3000` |
 | `PROXY_SALTOS_CONFIABLES` | Opcional. Proxies de confianza delante de la API (`trust proxy`; 0 a 5, por defecto 0). En producción detrás de un proxy TLS: `1` (D-17) | `0` |
 | `RUTA_ALMACENAMIENTO` | Opcional. Carpeta de archivos del servidor; las imágenes de productos van en `<ruta>/productos/` (D-46). Por defecto `./almacenamiento` (fuera de Git). Las pruebas e2e usan una carpeta temporal | `./almacenamiento` |
 | `VENDEDOR_NOMBRE`, `VENDEDOR_CORREO`, `VENDEDOR_TELEFONO`, `VENDEDOR_CLAVE` | Solo para `npm run crear-vendedor`; la API no las usa | ver `.env.example` |
@@ -131,7 +132,36 @@ Migraciones actuales: `CrearTablaUsuarios` (1.2), `CrearTablaSesiones` (1.3),
 `CrearTablasImportacionProducto` (2.8: tablas `importaciones_producto` y `borradores_producto`) y
 `AgregarAccionesImportacionAuditoria` (2.8: acciones `IMPORTACION_CREADA`, `BORRADORES_APROBADOS`,
 `BORRADORES_DESCARTADOS` y entidad `IMPORTACION`) y `AgregarCodigoProductoYCicloImportacion` (D-57:
-`productos.codigo`, estados de importación y acción `IMPORTACION_ELIMINADA`).
+`productos.codigo`, estados de importación y acción `IMPORTACION_ELIMINADA`),
+`AgregarEliminacionCuentaYPerfilVendedor` (T-1: `usuarios.eliminado_en`, propósito
+`ELIMINACION_CUENTA`, tabla `perfiles_vendedor` y acciones `CUENTA_ELIMINADA` y
+`PERFIL_VENDEDOR_ACTUALIZADO`) y `AgregarIdVendedorProductosEImportaciones` (D-60: `id_vendedor` en
+`productos` e `importaciones_producto`, relleno con el único Vendedor; falla con un mensaje claro si hay
+filas y no hay Vendedor). Ambas son aditivas y con `down()`; la primera no se revierte si ya hay cuentas
+eliminadas.
+
+## Cuenta, políticas y perfil comercial (RF-USU-06 a RF-USU-08, D-60, PA-21)
+
+Contrato: `docs/contrato-api/cuenta-y-politicas.md`.
+
+| Ruta | Quién | Descripción |
+|---|---|---|
+| `POST /api/v1/usuarios/yo/eliminacion` | Cliente | Elimina su cuenta con su `clave` (204; 422 con clave incorrecta; 3 por hora y cuenta → 429; el Vendedor, 403) |
+| `POST /api/v1/autenticacion/eliminacion/solicitud` | Público | Envía un código (`ELIMINACION_CUENTA`) al correo verificado de un Cliente. Siempre 204; 3 por minuto por IP y 3 envíos por hora por cuenta |
+| `POST /api/v1/autenticacion/eliminacion` | Público | `{ correo, codigo }` → 204 y elimina; fallo → 422 `CODIGO_INVALIDO`; 5 por minuto por IP |
+| `GET /politicas/privacidad`, `/politicas/terminos`, `/politicas/eliminar-cuenta` | Público | Páginas HTML (fuera de `/api/v1`) con CSP estricta; el formulario de eliminar usa el script propio `/politicas/eliminar-cuenta.js` |
+| `GET /api/v1/politicas` | Público | Versiones y URL (con `URL_PUBLICA`) de las políticas |
+| `GET` / `PUT /api/v1/vendedor/perfil` | Vendedor | Perfil comercial: `nombreComercial`, `ciudad`, `provincia` (24 de Ecuador), `whatsapp` |
+| `GET /api/v1/tienda` | Cliente o Vendedor | Perfil del único Vendedor (`pais: "EC"`); 404 `TIENDA_NO_CONFIGURADA` |
+
+- Eliminar **anonimiza** (nombre `Cuenta eliminada`, correo `eliminada-<id>@eliminada.invalid`, teléfono
+  `+000` y 9 dígitos), deja la cuenta inactiva con `eliminado_en`, revoca sesiones y borra códigos; las
+  filas que la referencian se conservan. La bitácora guarda `CUENTA_ELIMINADA` sin datos personales.
+- Los textos de las políticas son **borradores técnicos**: una persona con formación legal debe
+  revisarlos antes de publicar (PA-21, PA-12).
+- Cada producto e importación tiene `id_vendedor` (no se expone en la API). Las operaciones de gestión
+  solo actúan sobre los del Vendedor autenticado; sobre los de otro responden 404. Las pruebas lo
+  comprueban con un segundo Vendedor insertado directamente en la base de pruebas.
 
 ## Marcas (RF-PRO-04, RF-PRO-06, RF-CAT-05, D-43, D-48)
 

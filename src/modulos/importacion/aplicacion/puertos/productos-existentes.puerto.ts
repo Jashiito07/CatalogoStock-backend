@@ -32,40 +32,46 @@ export interface ProductoAusente {
 /**
  * Puerto con lo que `importacion` necesita de `productos` para los catálogos
  * mensuales (D-57): buscar por código dentro de una marca, actualizar **solo
- * el precio** y listar los ausentes. El adaptador usa el servicio público de
+ * el precio** y listar los ausentes. Todo se limita a los productos del
+ * Vendedor indicado (D-60). El adaptador usa el servicio público de
  * `productos`; nunca lee su tabla.
  */
 export interface ProductosExistentes {
-  /** Productos no eliminados de la marca con alguno de esos códigos. */
+  /** Productos no eliminados del Vendedor en la marca con alguno de esos códigos. */
   buscarPorCodigos(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<ProductoConCodigo[]>;
 
-  /** Entre `codigos`, los que ya tienen un producto no eliminado en la marca. */
+  /** Entre `codigos`, los que ya tienen un producto no eliminado del Vendedor en la marca. */
   codigosExistentes(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<Set<string>>;
 
   /** Como `buscarPorCodigos` para uno solo, **bloqueándolo** hasta el fin de la transacción en curso. */
   bloquearPorCodigo(
+    idVendedor: string,
     marcaId: string,
     codigo: string,
   ): Promise<ProductoConCodigo | null>;
 
   /**
-   * Productos no eliminados de la marca **sin código** cuyo nombre coincide con
-   * alguno de `nombres` sin distinguir mayúsculas, tildes ni signos (D-57).
-   * Nunca devuelve productos que tienen código.
+   * Productos no eliminados del Vendedor en la marca **sin código** cuyo nombre
+   * coincide con alguno de `nombres` sin distinguir mayúsculas, tildes ni
+   * signos (D-57). Nunca devuelve productos que tienen código.
    */
   buscarSinCodigoPorNombres(
+    idVendedor: string,
     marcaId: string,
     nombres: readonly string[],
   ): Promise<ProductoSinCodigo[]>;
 
   /** Como `buscarSinCodigoPorNombres` para un nombre, **bloqueando** lo encontrado hasta el fin de la transacción en curso. */
   bloquearSinCodigoPorNombre(
+    idVendedor: string,
     marcaId: string,
     nombre: string,
   ): Promise<ProductoSinCodigo[]>;
@@ -81,8 +87,9 @@ export interface ProductosExistentes {
     precio: string;
   }): Promise<void>;
 
-  /** Productos de la marca con código cuyo código no está en `codigosPresentes`. */
+  /** Productos del Vendedor en la marca con código cuyo código no está en `codigosPresentes`. */
   listarAusentes(
+    idVendedor: string,
     marcaId: string,
     codigosPresentes: readonly string[],
     paginacion: Paginacion,

@@ -3,7 +3,11 @@ import { ReglaNegocioError } from '../../../compartido/dominio/errores.js';
 import { Correo } from './correo.js';
 import { NombreUsuario } from './nombre-usuario.js';
 import { Telefono } from './telefono.js';
-import { Usuario, type PropiedadesUsuario } from './usuario.js';
+import {
+  Usuario,
+  type PropiedadesReconstituirUsuario,
+  type PropiedadesUsuario,
+} from './usuario.js';
 
 const AHORA = new Date('2026-11-05T15:00:00.000Z');
 const HASH_FICTICIO =
@@ -20,7 +24,7 @@ const datosBase = {
 
 function propiedades(
   cambios: Partial<PropiedadesUsuario> = {},
-): PropiedadesUsuario {
+): PropiedadesReconstituirUsuario {
   return {
     id: datosBase.id,
     nombre: datosBase.nombre,

@@ -31,7 +31,10 @@ export class DescartarBorradoresCasoUso {
     const resultados: ResultadoDescarte[] = [];
     const descartadosPorImportacion = new Map<string, number>();
     for (const id of datos.ids) {
-      const { resultado, idImportacion } = await this.descartarUno(id);
+      const { resultado, idImportacion } = await this.descartarUno(
+        id,
+        datos.idVendedor,
+      );
       resultados.push(resultado);
       if (idImportacion !== null) {
         descartadosPorImportacion.set(
@@ -56,9 +59,11 @@ export class DescartarBorradoresCasoUso {
 
   private descartarUno(
     id: string,
+    idVendedor: string,
   ): Promise<{ resultado: ResultadoDescarte; idImportacion: string | null }> {
     return this.unidadTrabajo.ejecutar(async () => {
-      const borrador = await this.borradores.bloquearPorId(id);
+      // D-60: un borrador de otro Vendedor es `NO_ENCONTRADO`.
+      const borrador = await this.borradores.bloquearPorId(id, idVendedor);
       if (borrador === null) {
         return { resultado: { id, error: 'NO_ENCONTRADO' }, idImportacion: null };
       }

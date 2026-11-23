@@ -30,17 +30,24 @@ export const MENSAJE_CODIGO_INVALIDO =
 /** Mensaje único de la verificación del correo (contrato de correo). */
 export const MENSAJE_CODIGO_VERIFICACION_INVALIDO =
   'El código no es válido o ya venció. Pide uno nuevo.';
+/** Mensaje único de la eliminación de la cuenta por la web (contrato cuenta-y-politicas). */
+export const MENSAJE_CODIGO_ELIMINACION_INVALIDO =
+  'El código no es válido o ya venció. Pide uno nuevo.';
 
 /**
  * Para qué se generó el código (contrato de correo, «Modelo de datos»):
  * - `RECUPERACION_ASISTIDA`: lo genera el Vendedor para un Cliente (RF-USU-05).
  * - `RECUPERACION_CORREO`: el sistema lo envía al correo verificado de la cuenta.
  * - `VERIFICACION_CORREO`: el sistema lo envía para verificar el correo.
+ * - `ELIMINACION_CUENTA`: el sistema lo envía al correo verificado para
+ *   eliminar la cuenta desde la web (RF-USU-06, PA-21). **Nunca** sirve para
+ *   recuperar la clave ni para verificar el correo.
  */
 export const PROPOSITOS_CODIGO = [
   'RECUPERACION_ASISTIDA',
   'RECUPERACION_CORREO',
   'VERIFICACION_CORREO',
+  'ELIMINACION_CUENTA',
 ] as const;
 
 export type PropositoCodigo = (typeof PROPOSITOS_CODIGO)[number];
@@ -55,17 +62,27 @@ export const PROPOSITOS_VERIFICACION: readonly PropositoCodigo[] = [
   'VERIFICACION_CORREO',
 ];
 
+export const PROPOSITOS_ELIMINACION: readonly PropositoCodigo[] = [
+  'ELIMINACION_CUENTA',
+];
+
 /**
  * Propósitos que se reemplazan entre sí: un código nuevo invalida el pendiente
  * de su mismo grupo (los dos de recuperación forman un grupo; la verificación
- * del correo, otro).
+ * del correo y la eliminación de la cuenta, uno cada una).
  */
 export function propositosDelGrupo(
   proposito: PropositoCodigo,
 ): readonly PropositoCodigo[] {
-  return proposito === 'VERIFICACION_CORREO'
-    ? PROPOSITOS_VERIFICACION
-    : PROPOSITOS_RECUPERACION;
+  switch (proposito) {
+    case 'VERIFICACION_CORREO':
+      return PROPOSITOS_VERIFICACION;
+    case 'ELIMINACION_CUENTA':
+      return PROPOSITOS_ELIMINACION;
+    case 'RECUPERACION_ASISTIDA':
+    case 'RECUPERACION_CORREO':
+      return PROPOSITOS_RECUPERACION;
+  }
 }
 
 /** Inicio de la ventana del límite de envíos que termina en `ahora`. */

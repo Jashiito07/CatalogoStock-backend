@@ -1,4 +1,9 @@
 import { type AppPruebas, crearAppPruebas } from './preparacion/app-pruebas.js';
+import { revertirHasta } from './preparacion/migraciones.js';
+
+const MIGRACION_CATALOGO_MENSUAL =
+  'AgregarCodigoProductoYCicloImportacion1795000000001';
+const VENDEDOR = '00000000-0000-4000-8000-0000000000aa';
 
 /**
  * e2e de la migración de los catálogos mensuales (AgregarCodigoProductoYCicloImportacion,
@@ -92,6 +97,11 @@ describe('Migración de los catálogos mensuales (e2e): código, relleno, estado
 
   it('D-57: el índice único impide dos productos iguales en la marca; permite el mismo código en otra marca, sin código repetido y con un eliminado', async () => {
     await contexto.limpiar();
+    await contexto.fuente.query(
+      `INSERT INTO usuarios (id, nombre, correo, telefono, hash_clave, rol)
+       VALUES ($1, 'Vendedor de Prueba', 'vendedor.migracion@ejemplo.test', '+593987654321', 'hash', 'VENDEDOR')`,
+      [VENDEDOR],
+    );
     for (const [id, nombre] of [
       [MARCA_A, 'Yanbal'],
       [MARCA_B, 'Leonisa'],
@@ -103,8 +113,8 @@ describe('Migración de los catálogos mensuales (e2e): código, relleno, estado
     }
     const nuevo = (id: string, marca: string, codigo: string | null, eliminado: string | null) =>
       contexto.fuente.query(
-        `INSERT INTO productos (id, nombre, nombre_busqueda, id_marca, precio, codigo, eliminado_en)
-         VALUES ($1, 'Producto', 'producto', $2, 1.00, $3, $4)`,
+        `INSERT INTO productos (id, id_vendedor, nombre, nombre_busqueda, id_marca, precio, codigo, eliminado_en)
+         VALUES ($1, '${VENDEDOR}', 'Producto', 'producto', $2, 1.00, $3, $4)`,
         [id, marca, codigo, eliminado],
       );
     await nuevo('00000000-0000-4000-8000-000000000001', MARCA_A, '43873', null);
@@ -124,13 +134,20 @@ describe('Migración de los catálogos mensuales (e2e): código, relleno, estado
   it('D-57: revertir devuelve «Cód. <código>» a la descripción y quita lo nuevo; volver a aplicar rellena el código, quita el sufijo y archiva las importaciones anteriores', async () => {
     await contexto.limpiar();
     // La reversión no borra la bitácora: con la base vacía, `down()` es seguro.
-    await contexto.fuente.undoLastMigration({ transaction: 'each' });
+    await revertirHasta(contexto.fuente, MIGRACION_CATALOGO_MENSUAL);
 
     expect(await columnas('productos')).not.toContain('codigo');
     expect(await columnas('importaciones_producto')).not.toContain('estado');
     expect(await valores('accion_auditoria')).not.toContain('IMPORTACION_ELIMINADA');
     // Lo anterior sigue intacto.
     expect(await valores('accion_auditoria')).toContain('BORRADORES_DESCARTADOS');
+
+    // D-60: la migración posterior (id_vendedor) rellena el dueño con el único Vendedor.
+    await contexto.fuente.query(
+      `INSERT INTO usuarios (id, nombre, correo, telefono, hash_clave, rol)
+       VALUES ($1, 'Vendedor de Prueba', 'vendedor.migracion@ejemplo.test', '+593987654321', 'hash', 'VENDEDOR')`,
+      [VENDEDOR],
+    );
 
     // Datos «de antes» (D-55): el código iba al final de la descripción.
     for (const [id, nombre] of [
@@ -186,7 +203,7 @@ describe('Migración de los catálogos mensuales (e2e): código, relleno, estado
     expect(await diferenciasDeEsquema()).toEqual([]);
 
     // Y de nuevo hacia atrás: el sufijo vuelve a la descripción.
-    await contexto.fuente.undoLastMigration({ transaction: 'each' });
+    await revertirHasta(contexto.fuente, MIGRACION_CATALOGO_MENSUAL);
     const atras = await contexto.fuente.query<{ id: string; descripcion: string }[]>(
       `SELECT id, descripcion FROM productos ORDER BY id`,
     );

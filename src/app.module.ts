@@ -9,6 +9,7 @@ import { validarVariablesEntorno } from './configuracion/variables-entorno.js';
 import { ConsultaBitacoraModule } from './modulos/auditoria/consulta-bitacora.module.js';
 import { ImportacionModule } from './modulos/importacion/index.js';
 import { MarcasModule } from './modulos/marcas/index.js';
+import { PoliticasModule } from './modulos/politicas/index.js';
 import { ProductosModule } from './modulos/productos/index.js';
 import { SaludModule } from './modulos/salud/index.js';
 import { UsuariosModule } from './modulos/usuarios/index.js';
@@ -28,6 +29,7 @@ import { UsuariosModule } from './modulos/usuarios/index.js';
     ProteccionRutasModule,
     SaludModule,
     UsuariosModule,
+    PoliticasModule,
     ConsultaBitacoraModule,
     MarcasModule,
     // D-57: ImportacionModule va ANTES que ProductosModule. Express resuelve las

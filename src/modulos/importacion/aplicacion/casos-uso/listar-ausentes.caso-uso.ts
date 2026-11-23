@@ -28,16 +28,23 @@ export class ListarAusentesCasoUso {
 
   async ejecutar(
     idImportacion: string,
+    idVendedor: string,
     paginacion: Paginacion,
   ): Promise<Pagina<ProductoAusente>> {
     const importacion = await this.importaciones.buscarPorId(idImportacion);
-    if (importacion === null) {
+    // D-60: la de otro Vendedor responde 404.
+    if (importacion === null || !importacion.perteneceA(idVendedor)) {
       throw new ImportacionNoEncontradaError();
     }
     if (importacion.estaArchivada) {
       throw new ImportacionArchivadaError();
     }
     const codigos = await this.borradores.codigosDeImportacion(importacion.id);
-    return this.productos.listarAusentes(importacion.marcaId, codigos, paginacion);
+    return this.productos.listarAusentes(
+      idVendedor,
+      importacion.marcaId,
+      codigos,
+      paginacion,
+    );
   }
 }

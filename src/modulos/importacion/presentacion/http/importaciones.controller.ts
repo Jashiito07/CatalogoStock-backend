@@ -103,10 +103,12 @@ export class ImportacionesController {
    */
   @Get()
   async listarTodas(
+    @UsuarioActual() actor: ActorAutenticado,
     @Query() consulta: ConsultaImportacionesDto,
   ): Promise<RespuestaListaImportaciones> {
     return aRespuestaListaImportaciones(
       await this.listarImportaciones.ejecutar({
+        idVendedor: actor.id,
         estado:
           consulta.estado !== undefined && esEstadoImportacion(consulta.estado)
             ? consulta.estado
@@ -189,11 +191,13 @@ export class ImportacionesController {
   /** PATCH /api/v1/productos/importaciones/borradores/{borradorId} */
   @Patch('borradores/:borradorId')
   async editar(
+    @UsuarioActual() actor: ActorAutenticado,
     @Param('borradorId', idUuid) idBorrador: string,
     @Body() cuerpo: EditarBorradorDto,
   ): Promise<RespuestaBorrador> {
     return aRespuestaBorrador(
       await this.editarBorrador.ejecutar({
+        idVendedor: actor.id,
         idBorrador: idBorrador.toLowerCase(),
         cambios: {
           nombre: cuerpo.nombre,
@@ -209,10 +213,14 @@ export class ImportacionesController {
   /** GET /api/v1/productos/importaciones/{id} */
   @Get(':id')
   async obtener(
+    @UsuarioActual() actor: ActorAutenticado,
     @Param('id', idUuid) idImportacion: string,
   ): Promise<RespuestaImportacion> {
     return aRespuestaImportacion(
-      await this.obtenerImportacion.ejecutar(idImportacion.toLowerCase()),
+      await this.obtenerImportacion.ejecutar(
+        idImportacion.toLowerCase(),
+        actor.id,
+      ),
     );
   }
 
@@ -238,12 +246,14 @@ export class ImportacionesController {
    */
   @Get(':id/ausentes')
   async ausentes(
+    @UsuarioActual() actor: ActorAutenticado,
     @Param('id', idUuid) idImportacion: string,
     @Query() consulta: PaginacionDto,
   ): Promise<RespuestaListaAusentes> {
     return aRespuestaListaAusentes(
       await this.listarAusentes.ejecutar(
         idImportacion.toLowerCase(),
+        actor.id,
         paginacionDe(consulta),
       ),
     );
@@ -252,11 +262,13 @@ export class ImportacionesController {
   /** GET /api/v1/productos/importaciones/{id}/borradores */
   @Get(':id/borradores')
   async listar(
+    @UsuarioActual() actor: ActorAutenticado,
     @Param('id', idUuid) idImportacion: string,
     @Query() consulta: ConsultaBorradoresDto,
   ): Promise<RespuestaListaBorradores> {
     return aRespuestaListaBorradores(
       await this.listarBorradores.ejecutar({
+        idVendedor: actor.id,
         idImportacion: idImportacion.toLowerCase(),
         estado:
           consulta.estado !== undefined && esEstadoBorrador(consulta.estado)

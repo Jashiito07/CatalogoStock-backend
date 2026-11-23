@@ -6,6 +6,8 @@ import type { Disponibilidad } from '../../dominio/disponibilidad.js';
 import type { Producto } from '../../dominio/producto.js';
 
 export interface FiltroProductos {
+  /** Solo los productos de este Vendedor (D-60); sin él, los de todos (la lista del Cliente). */
+  idVendedor?: string;
   /** Solo productos de estas marcas (lista vacía: ninguno). */
   marcaIds?: readonly string[];
   /** Clave de búsqueda (sin tildes ni mayúsculas) sobre nombre y descripción. */
@@ -43,31 +45,41 @@ export interface ProductoRepositorio {
    */
   guardar(producto: Producto): Promise<boolean>;
 
-  /** Los productos no eliminados de la marca cuyo código está entre `codigos` (D-57). */
+  /**
+   * Los productos no eliminados **del Vendedor** en la marca cuyo código está
+   * entre `codigos` (D-57, D-60).
+   */
   buscarPorCodigos(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<Producto[]>;
 
-  /** Solo los códigos que ya tienen un producto no eliminado en la marca (consulta ligera). */
+  /** Solo los códigos que ya tienen un producto no eliminado del Vendedor en la marca (consulta ligera). */
   codigosExistentes(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<Set<string>>;
 
   /**
-   * El producto no eliminado de la marca con ese código, bloqueado hasta el
-   * fin de la transacción en curso (`FOR UPDATE`): serializa las aprobaciones
-   * del mismo código (D-57).
+   * El producto no eliminado del Vendedor en la marca con ese código,
+   * bloqueado hasta el fin de la transacción en curso (`FOR UPDATE`): serializa
+   * las aprobaciones del mismo código (D-57, D-60).
    */
-  bloquearPorCodigo(marcaId: string, codigo: string): Promise<Producto | null>;
+  bloquearPorCodigo(
+    idVendedor: string,
+    marcaId: string,
+    codigo: string,
+  ): Promise<Producto | null>;
 
   /**
-   * Productos no eliminados de la marca **sin código** cuya clave de
-   * emparejamiento (`claveDeEmparejamiento` del nombre) está entre `claves`
+   * Productos no eliminados del Vendedor en la marca **sin código** cuya clave
+   * de emparejamiento (`claveDeEmparejamiento` del nombre) está entre `claves`
    * (D-57, emparejado por nombre).
    */
   buscarSinCodigoPorClaves(
+    idVendedor: string,
     marcaId: string,
     claves: readonly string[],
   ): Promise<Producto[]>;
@@ -77,20 +89,32 @@ export interface ProductoRepositorio {
    * productos encontrados y serializando (bloqueo asesor por marca y clave) a
    * quienes aprueban el mismo nombre a la vez, aunque aún no exista ninguno.
    */
-  bloquearSinCodigoPorClave(marcaId: string, clave: string): Promise<Producto[]>;
+  bloquearSinCodigoPorClave(
+    idVendedor: string,
+    marcaId: string,
+    clave: string,
+  ): Promise<Producto[]>;
 
   /**
-   * Productos de la marca con código, no eliminados, cuyo código **no** está
-   * en `codigosPresentes` (D-57, «ausentes»). Ordenados por nombre y id.
+   * Productos del Vendedor en la marca con código, no eliminados, cuyo código
+   * **no** está en `codigosPresentes` (D-57, «ausentes»). Ordenados por nombre y id.
    */
   listarAusentes(
+    idVendedor: string,
     marcaId: string,
     codigosPresentes: readonly string[],
     paginacion: Paginacion,
   ): Promise<Pagina<Producto>>;
 
-  /** Marca el producto como eliminado; `false` si no existe o ya lo estaba. */
-  marcarEliminado(id: string, ahora: Date): Promise<boolean>;
+  /**
+   * Marca el producto **del Vendedor** como eliminado; `false` si no existe,
+   * es de otro Vendedor o ya estaba eliminado (D-60).
+   */
+  marcarEliminado(
+    id: string,
+    idVendedor: string,
+    ahora: Date,
+  ): Promise<boolean>;
 }
 
 export const PRODUCTO_REPOSITORIO = Symbol('PRODUCTO_REPOSITORIO');

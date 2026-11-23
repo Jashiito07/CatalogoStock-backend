@@ -126,6 +126,11 @@ export class CodigoRecuperacionRepositorioTypeorm implements CodigoRecuperacionR
     );
   }
 
+  async eliminarDeUsuario(idUsuario: string): Promise<number> {
+    const resultado = await this.filas.delete({ idUsuario });
+    return resultado.affected ?? 0;
+  }
+
   async vencimientosVigentes(
     idsUsuarios: readonly string[],
     ahora: Date,

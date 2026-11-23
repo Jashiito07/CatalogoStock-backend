@@ -48,7 +48,7 @@ export class GenerarCodigoRecuperacionCasoUso {
 
   async ejecutar(datos: DatosGenerarCodigo): Promise<CodigoGenerado> {
     const cliente = await this.usuarios.buscarPorId(datos.idCliente);
-    if (cliente === null || !cliente.esCliente()) {
+    if (cliente === null || !cliente.esCliente() || cliente.estaEliminada()) {
       throw new ClienteNoEncontradoError();
     }
     if (!cliente.activo) {

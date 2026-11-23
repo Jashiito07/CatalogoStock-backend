@@ -1,5 +1,6 @@
-import type { INestApplication } from '@nestjs/common';
+import { type INestApplication, RequestMethod } from '@nestjs/common';
 import helmet from 'helmet';
+import { RUTAS_PAGINAS_POLITICAS } from '../modulos/politicas/dominio/documentos-politicas.js';
 import { FiltroErrores } from '../compartido/presentacion/filtro-errores.js';
 import { crearValidationPipe } from '../compartido/presentacion/validacion.js';
 
@@ -28,7 +29,14 @@ export function configurarAplicacionHttp(
       .getInstance();
     express.set('trust proxy', saltosProxy);
   }
-  app.setGlobalPrefix(PREFIJO_API);
+  // RF-USU-07: las páginas públicas de las políticas se sirven en
+  // `/politicas/...`, fuera del prefijo de la API (`/api/v1/politicas` sí lo lleva).
+  app.setGlobalPrefix(PREFIJO_API, {
+    exclude: RUTAS_PAGINAS_POLITICAS.map((ruta) => ({
+      path: ruta.slice(1),
+      method: RequestMethod.GET,
+    })),
+  });
   app.use(helmet());
   app.enableCors({
     origin: origenesCors,

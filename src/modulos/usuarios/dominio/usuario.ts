@@ -19,9 +19,23 @@ export interface PropiedadesUsuario {
   versionPrivacidad: string | null;
   /** Cuándo se verificó el correo con un código (contrato de correo); `null` si aún no. */
   correoVerificadoEn: Date | null;
+  /**
+   * Cuándo se eliminó la cuenta (RF-USU-06, PA-21); `null` si sigue vigente.
+   * Una cuenta eliminada está anonimizada y siempre inactiva.
+   */
+  eliminadoEn: Date | null;
   creadoEn: Date;
   actualizadoEn: Date;
 }
+
+/**
+ * Propiedades para reconstituir un usuario guardado. `eliminadoEn` es
+ * opcional: omitirlo equivale a una cuenta no eliminada.
+ */
+export type PropiedadesReconstituirUsuario = Omit<
+  PropiedadesUsuario,
+  'eliminadoEn'
+> & { eliminadoEn?: Date | null };
 
 interface DatosNuevoUsuario {
   id: string;
@@ -98,6 +112,7 @@ export class Usuario {
       privacidadAceptadaEn: datos.ahora,
       versionPrivacidad: datos.versionPrivacidad,
       correoVerificadoEn: null,
+      eliminadoEn: null,
       creadoEn: datos.ahora,
       actualizadoEn: datos.ahora,
     });
@@ -119,14 +134,18 @@ export class Usuario {
       privacidadAceptadaEn: null,
       versionPrivacidad: null,
       correoVerificadoEn: null,
+      eliminadoEn: null,
       creadoEn: datos.ahora,
       actualizadoEn: datos.ahora,
     });
   }
 
   /** Reconstruye un usuario ya guardado (lo usa la capa de persistencia). */
-  static reconstituir(propiedades: PropiedadesUsuario): Usuario {
-    return new Usuario({ ...propiedades });
+  static reconstituir(propiedades: PropiedadesReconstituirUsuario): Usuario {
+    return new Usuario({
+      ...propiedades,
+      eliminadoEn: propiedades.eliminadoEn ?? null,
+    });
   }
 
   get id(): string {
@@ -169,6 +188,10 @@ export class Usuario {
     return this.#propiedades.correoVerificadoEn;
   }
 
+  get eliminadoEn(): Date | null {
+    return this.#propiedades.eliminadoEn;
+  }
+
   get creadoEn(): Date {
     return this.#propiedades.creadoEn;
   }
@@ -183,6 +206,11 @@ export class Usuario {
 
   esCliente(): boolean {
     return this.#propiedades.rol === 'CLIENTE';
+  }
+
+  /** `true` si la cuenta se eliminó y sus datos personales se anonimizaron (RF-USU-06). */
+  estaEliminada(): boolean {
+    return this.#propiedades.eliminadoEn !== null;
   }
 
   /** `true` si el correo se verificó con un código (la recuperación por correo lo exige). */

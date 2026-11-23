@@ -44,6 +44,12 @@ export const ACCIONES_AUDITORIA = [
   // manual o por retención (6 meses) de una importación. Migración
   // AgregarCodigoProductoYCicloImportacion.
   'IMPORTACION_ELIMINADA',
+  // Cuenta y políticas (contrato cuenta-y-politicas, RF-USU-06, RF-USU-08):
+  // eliminación de la cuenta del Cliente (`{ idUsuario, via }`, sin datos
+  // personales) y cambios del perfil comercial del Vendedor (`{ campos }`).
+  // Migración AgregarEliminacionCuentaYPerfilVendedor.
+  'CUENTA_ELIMINADA',
+  'PERFIL_VENDEDOR_ACTUALIZADO',
   // F6/F7: su `detalle` se define en esas fases (CA-03).
   'PAGO_VERIFICADO',
   'PEDIDO_ESTADO_CAMBIADO',
@@ -98,6 +104,8 @@ export const ENTIDAD_DE_LA_ACCION: Readonly<
   BORRADORES_APROBADOS: 'IMPORTACION',
   BORRADORES_DESCARTADOS: 'IMPORTACION',
   IMPORTACION_ELIMINADA: 'IMPORTACION',
+  CUENTA_ELIMINADA: 'USUARIO',
+  PERFIL_VENDEDOR_ACTUALIZADO: 'USUARIO',
   PAGO_VERIFICADO: 'PAGO',
   PEDIDO_ESTADO_CAMBIADO: 'PEDIDO',
 };

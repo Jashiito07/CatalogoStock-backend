@@ -208,7 +208,7 @@ describe('D-57: catálogos mensuales (casos de uso)', () => {
       reloj.actual = new Date('2026-08-31T12:00:00.000Z');
       await importar(PDF_MES_2);
 
-      const vista = await obtener.ejecutar(mes1.importacion.id);
+      const vista = await obtener.ejecutar(mes1.importacion.id, ID_VENDEDOR);
 
       expect(vista.importacion.estado).toBe('ARCHIVADA');
       expect(vista.importacion.archivadaEn?.toISOString()).toBe('2026-08-31T12:00:00.000Z');
@@ -223,7 +223,7 @@ describe('D-57: catálogos mensuales (casos de uso)', () => {
       const mes2 = await importar(PDF_MES_2);
       const pagina = crearPaginacion();
 
-      const todas = await listarImportaciones.ejecutar({ paginacion: pagina });
+      const todas = await listarImportaciones.ejecutar({ idVendedor: ID_VENDEDOR, paginacion: pagina });
       expect(todas.total).toBe(3);
       expect(todas.elementos.map((v) => v.importacion.id)).toEqual([
         mes2.importacion.id,
@@ -233,18 +233,21 @@ describe('D-57: catálogos mensuales (casos de uso)', () => {
       expect(todas.elementos[0].totales.pendientes).toBe(2);
 
       const archivadas = await listarImportaciones.ejecutar({
+        idVendedor: ID_VENDEDOR,
         estado: 'ARCHIVADA',
         paginacion: pagina,
       });
       expect(archivadas.elementos.map((v) => v.importacion.id)).toEqual([mes1.importacion.id]);
 
       const deLeonisa = await listarImportaciones.ejecutar({
+        idVendedor: ID_VENDEDOR,
         marcaId: ID_OTRA_MARCA,
         paginacion: pagina,
       });
       expect(deLeonisa.elementos.map((v) => v.marca.nombre)).toEqual(['Leonisa']);
 
       const segunda = await listarImportaciones.ejecutar({
+        idVendedor: ID_VENDEDOR,
         paginacion: crearPaginacion(2, 2),
       });
       expect(segunda).toMatchObject({ pagina: 2, tamanio: 2, total: 3 });
@@ -263,6 +266,7 @@ describe('D-57: catálogos mensuales (casos de uso)', () => {
       const borrador = borradorDe(mes.importacion.id, '43873');
 
       const lista = await listarBorradores.ejecutar({
+        idVendedor: ID_VENDEDOR,
         idImportacion: mes.importacion.id,
         paginacion: crearPaginacion(),
       });
@@ -324,6 +328,7 @@ describe('D-57: catálogos mensuales (casos de uso)', () => {
       const borrador = borradorDe(mes.importacion.id, '43873');
 
       const lista = await listarBorradores.ejecutar({
+        idVendedor: ID_VENDEDOR,
         idImportacion: mes.importacion.id,
         paginacion: crearPaginacion(),
       });
@@ -443,7 +448,7 @@ describe('D-57: catálogos mensuales (casos de uso)', () => {
       const mes = await importar();
       await aprobarUno(borradorDe(mes.importacion.id, '43873').id);
 
-      const vista = await obtener.ejecutar(mes.importacion.id);
+      const vista = await obtener.ejecutar(mes.importacion.id, ID_VENDEDOR);
 
       expect(vista.totales).toMatchObject({
         pendientes: 1,
@@ -460,7 +465,7 @@ describe('D-57: catálogos mensuales (casos de uso)', () => {
       expect(mes1.totales.ausentes).toBe(1);
       await importar(PDF_MES_2);
 
-      const archivada = await obtener.ejecutar(mes1.importacion.id);
+      const archivada = await obtener.ejecutar(mes1.importacion.id, ID_VENDEDOR);
 
       expect(archivada.totales.ausentes).toBe(0);
     });
@@ -478,7 +483,7 @@ describe('D-57: catálogos mensuales (casos de uso)', () => {
         existentes.productos.map((p) => ({ ...p, precio: p.precio.aTexto() })),
       );
 
-      const pagina = await ausentes.ejecutar(mes.importacion.id, crearPaginacion());
+      const pagina = await ausentes.ejecutar(mes.importacion.id, ID_VENDEDOR, crearPaginacion());
 
       expect(pagina.total).toBe(2);
       expect(pagina.elementos).toEqual([
@@ -512,8 +517,8 @@ describe('D-57: catálogos mensuales (casos de uso)', () => {
       const mes = await importar();
       await aprobarUno(borradorDe(mes.importacion.id, '43873').id);
 
-      const primera = await ausentes.ejecutar(mes.importacion.id, crearPaginacion(1, 2));
-      const segunda = await ausentes.ejecutar(mes.importacion.id, crearPaginacion(2, 2));
+      const primera = await ausentes.ejecutar(mes.importacion.id, ID_VENDEDOR, crearPaginacion(1, 2));
+      const segunda = await ausentes.ejecutar(mes.importacion.id, ID_VENDEDOR, crearPaginacion(2, 2));
 
       expect(primera).toMatchObject({ total: 3, pagina: 1, tamanio: 2 });
       expect(primera.elementos.map((p) => p.nombre)).toEqual(['A', 'B']);
@@ -524,12 +529,12 @@ describe('D-57: catálogos mensuales (casos de uso)', () => {
       const mes1 = await importar(PDF_MES_1);
       await importar(PDF_MES_2);
 
-      await expect(ausentes.ejecutar(mes1.importacion.id, crearPaginacion())).rejects.toMatchObject({
+      await expect(ausentes.ejecutar(mes1.importacion.id, ID_VENDEDOR, crearPaginacion())).rejects.toMatchObject({
         codigo: 'IMPORTACION_ARCHIVADA',
         categoria: 'REGLA_NEGOCIO',
       });
       await expect(
-        ausentes.ejecutar('00000000-0000-4000-8000-000000000999', crearPaginacion()),
+        ausentes.ejecutar('00000000-0000-4000-8000-000000000999', ID_VENDEDOR, crearPaginacion()),
       ).rejects.toMatchObject({ categoria: 'NO_ENCONTRADO' });
     });
   });

@@ -23,6 +23,7 @@ import {
   propositosDelGrupo,
 } from '../../dominio/codigo-recuperacion.js';
 import { Correo } from '../../dominio/correo.js';
+import type { DatosAnonimos } from '../../dominio/cuenta-eliminada.js';
 import { CorreoNoDisponibleError } from '../../dominio/errores-correo.js';
 import {
   CorreoYaRegistradoError,
@@ -195,6 +196,40 @@ export class UsuarioRepositorioEnMemoria implements UsuarioRepositorio {
     return Promise.resolve(true);
   }
 
+  /** Mismo efecto que el adaptador: solo Clientes no eliminados; conserva la fila. */
+  anonimizarCuenta(
+    idUsuario: string,
+    datos: DatosAnonimos,
+    hashClave: string,
+    ahora: Date,
+  ): Promise<boolean> {
+    const indice = this.usuarios.findIndex((u) => u.id === idUsuario);
+    if (
+      indice < 0 ||
+      !this.usuarios[indice].esCliente() ||
+      this.usuarios[indice].estaEliminada()
+    ) {
+      return Promise.resolve(false);
+    }
+    const u = this.usuarios[indice];
+    this.usuarios[indice] = Usuario.reconstituir({
+      id: u.id,
+      nombre: NombreUsuario.crear(datos.nombre),
+      correo: Correo.crear(datos.correo),
+      telefono: Telefono.deCuentaEliminada(datos.telefono),
+      hashClave,
+      rol: u.rol,
+      activo: false,
+      privacidadAceptadaEn: u.privacidadAceptadaEn,
+      versionPrivacidad: u.versionPrivacidad,
+      correoVerificadoEn: null,
+      eliminadoEn: ahora,
+      creadoEn: u.creadoEn,
+      actualizadoEn: ahora,
+    });
+    return Promise.resolve(true);
+  }
+
   listarClientes(
     busqueda: BusquedaClientes | null,
     paginacion: Paginacion,
@@ -217,6 +252,7 @@ export class UsuarioRepositorioEnMemoria implements UsuarioRepositorio {
       .filter(
         (u) =>
           u.esCliente() &&
+          !u.estaEliminada() &&
           (activo === undefined || u.activo === activo) &&
           (correoVerificado === undefined ||
             u.tieneCorreoVerificado() === correoVerificado) &&
@@ -511,6 +547,14 @@ export class CodigoRecuperacionRepositorioEnMemoria implements CodigoRecuperacio
       this.codigos[indice] = copiarCodigo(codigo);
     }
     return Promise.resolve();
+  }
+
+  eliminarDeUsuario(idUsuario: string): Promise<number> {
+    const antes = this.codigos.length;
+    const restantes = this.codigos.filter((c) => c.idUsuario !== idUsuario);
+    this.codigos.length = 0;
+    this.codigos.push(...restantes);
+    return Promise.resolve(antes - restantes.length);
   }
 
   vencimientosVigentes(

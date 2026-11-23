@@ -40,6 +40,12 @@ export class ListarProductosCasoUso {
     };
     const marcaId = datos.marcaId?.toLowerCase();
 
+    // D-60: el Vendedor solo gestiona (y ve) sus productos; el Cliente ve el
+    // catálogo de las marcas activas (en la v1, el del único Vendedor).
+    if (actor.rol === 'VENDEDOR') {
+      filtro.idVendedor = actor.id;
+    }
+
     if (actor.rol === 'CLIENTE') {
       const activas = (await this.marcas.listarActivas()).map((m) => m.id);
       filtro.marcaIds =

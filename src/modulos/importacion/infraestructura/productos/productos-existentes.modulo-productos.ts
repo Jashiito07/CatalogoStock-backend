@@ -38,45 +38,62 @@ export class ProductosExistentesModuloProductos implements ProductosExistentes {
   constructor(private readonly productos: ProductosServicio) {}
 
   async buscarPorCodigos(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<ProductoConCodigo[]> {
-    return (await this.productos.buscarPorCodigos(marcaId, codigos)).map(
-      conCodigo,
-    );
+    return (
+      await this.productos.buscarPorCodigos(idVendedor, marcaId, codigos)
+    ).map(conCodigo);
   }
 
   codigosExistentes(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<Set<string>> {
-    return this.productos.codigosExistentes(marcaId, codigos);
+    return this.productos.codigosExistentes(idVendedor, marcaId, codigos);
   }
 
   async bloquearPorCodigo(
+    idVendedor: string,
     marcaId: string,
     codigo: string,
   ): Promise<ProductoConCodigo | null> {
-    const producto = await this.productos.bloquearPorCodigo(marcaId, codigo);
+    const producto = await this.productos.bloquearPorCodigo(
+      idVendedor,
+      marcaId,
+      codigo,
+    );
     return producto === null ? null : conCodigo(producto);
   }
 
   async buscarSinCodigoPorNombres(
+    idVendedor: string,
     marcaId: string,
     nombres: readonly string[],
   ): Promise<ProductoSinCodigo[]> {
-    return (await this.productos.buscarSinCodigoPorNombres(marcaId, nombres)).map(
-      sinCodigo,
-    );
+    return (
+      await this.productos.buscarSinCodigoPorNombres(
+        idVendedor,
+        marcaId,
+        nombres,
+      )
+    ).map(sinCodigo);
   }
 
   async bloquearSinCodigoPorNombre(
+    idVendedor: string,
     marcaId: string,
     nombre: string,
   ): Promise<ProductoSinCodigo[]> {
-    return (await this.productos.bloquearSinCodigoPorNombre(marcaId, nombre)).map(
-      sinCodigo,
-    );
+    return (
+      await this.productos.bloquearSinCodigoPorNombre(
+        idVendedor,
+        marcaId,
+        nombre,
+      )
+    ).map(sinCodigo);
   }
 
   actualizarPrecio(datos: {
@@ -88,11 +105,13 @@ export class ProductosExistentesModuloProductos implements ProductosExistentes {
   }
 
   async listarAusentes(
+    idVendedor: string,
     marcaId: string,
     codigosPresentes: readonly string[],
     paginacion: Paginacion,
   ): Promise<Pagina<ProductoAusente>> {
     const pagina = await this.productos.listarAusentes(
+      idVendedor,
       marcaId,
       codigosPresentes,
       paginacion,

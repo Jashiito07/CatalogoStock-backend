@@ -53,6 +53,7 @@ describe('UsuarioMapeador', () => {
       fechaAceptacionPrivacidad: null,
       versionPrivacidad: null,
       correoVerificadoEn: null,
+      eliminadoEn: null,
       fechaCreacion: AHORA,
       fechaActualizacion: AHORA,
     });

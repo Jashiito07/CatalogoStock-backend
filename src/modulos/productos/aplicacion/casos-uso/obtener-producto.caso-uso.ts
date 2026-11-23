@@ -5,8 +5,9 @@ import type { ProductoRepositorio } from '../puertos/producto.repositorio.js';
 import type { VistaProducto } from '../vista-producto.js';
 
 /**
- * Detalle de un producto (RF-PRO-01). 404 si no existe, está eliminado (PA-07)
- * o su marca está inactiva y quien consulta es un Cliente.
+ * Detalle de un producto (RF-PRO-01). 404 si no existe, está eliminado (PA-07),
+ * es de otro Vendedor (D-60) o su marca está inactiva y quien consulta es un
+ * Cliente.
  */
 export class ObtenerProductoCasoUso {
   constructor(
@@ -19,7 +20,11 @@ export class ObtenerProductoCasoUso {
     idProducto: string,
   ): Promise<VistaProducto> {
     const producto = await this.productos.buscarPorId(idProducto);
-    if (producto === null) {
+    // D-60: el Vendedor solo consulta sus productos; los de otro responden 404.
+    if (
+      producto === null ||
+      (actor.rol === 'VENDEDOR' && !producto.perteneceA(actor.id))
+    ) {
       throw new ProductoNoEncontradoError();
     }
     const marca = await this.marcas.buscarPorId(producto.marcaId);

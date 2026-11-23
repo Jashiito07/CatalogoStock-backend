@@ -34,6 +34,11 @@ export const MENSAJE_CODIGO_INVALIDO =
 /** Vista pública de un producto para otros módulos y para la API. */
 export interface ProductoPublico {
   id: string;
+  /**
+   * Vendedor dueño del producto (D-60). Solo lo usan los demás módulos para
+   * comprobar la propiedad: **no se expone** en las respuestas de la API.
+   */
+  idVendedor: string;
   nombre: string;
   /** Código del catálogo de la marca (único por marca entre los no eliminados) o `null` (D-57). */
   codigo: string | null;
@@ -48,6 +53,7 @@ export interface ProductoPublico {
 
 export interface DatosProducto {
   id: string;
+  idVendedor: string;
   nombre: string;
   codigo: string | null;
   marcaId: string;
@@ -60,6 +66,8 @@ export interface DatosProducto {
 
 export interface DatosCrearProducto {
   id: string;
+  /** Vendedor autenticado que crea el producto (nunca viene del cliente, D-60). */
+  idVendedor: string;
   nombre: unknown;
   /** Opcional (`undefined` o `null`: sin código). */
   codigo?: unknown;
@@ -161,6 +169,7 @@ export class Producto {
   static crear(datos: DatosCrearProducto): Producto {
     return new Producto({
       id: datos.id,
+      idVendedor: datos.idVendedor,
       nombre: validarNombreProducto(datos.nombre),
       codigo:
         datos.codigo === undefined || datos.codigo === null
@@ -187,6 +196,9 @@ export class Producto {
 
   get id(): string {
     return this.datos.id;
+  }
+  get idVendedor(): string {
+    return this.datos.idVendedor;
   }
   get nombre(): string {
     return this.datos.nombre;
@@ -291,9 +303,15 @@ export class Producto {
     return { producto: new Producto(siguiente), campos, precioAnterior };
   }
 
+  /** `true` si el producto es de ese Vendedor (D-60). */
+  perteneceA(idVendedor: string): boolean {
+    return this.datos.idVendedor === idVendedor;
+  }
+
   aPublico(): ProductoPublico {
     return {
       id: this.id,
+      idVendedor: this.idVendedor,
       nombre: this.nombre,
       codigo: this.codigo,
       marcaId: this.marcaId,

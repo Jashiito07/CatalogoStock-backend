@@ -7,6 +7,8 @@ import {
   MENSAJE_CODIGO_INVALIDO,
   MENSAJE_CODIGO_VERIFICACION_INVALIDO,
   PROPOSITOS_CODIGO,
+  PROPOSITOS_ELIMINACION,
+  PROPOSITOS_RECUPERACION,
   type PropositoCodigo,
   propositosDelGrupo,
 } from './codigo-recuperacion.js';
@@ -34,11 +36,24 @@ function codigo(
 }
 
 describe('Contrato de correo: propósito del código (dominio)', () => {
-  it('hay tres propósitos y la recuperación asistida y por correo se reemplazan entre sí; la verificación va aparte', () => {
+  it('RF-USU-06: la eliminación de la cuenta es un propósito aparte que no se mezcla con la recuperación ni con la verificación', () => {
+    expect(propositosDelGrupo('ELIMINACION_CUENTA')).toEqual([
+      'ELIMINACION_CUENTA',
+    ]);
+    expect(PROPOSITOS_ELIMINACION).toEqual(['ELIMINACION_CUENTA']);
+    expect(PROPOSITOS_RECUPERACION).not.toContain('ELIMINACION_CUENTA');
+    expect(propositosDelGrupo('RECUPERACION_CORREO')).not.toContain(
+      'ELIMINACION_CUENTA',
+    );
+    expect(codigo('ELIMINACION_CUENTA', null).generadoPor).toBeNull();
+  });
+
+  it('hay cuatro propósitos y la recuperación asistida y por correo se reemplazan entre sí; la verificación y la eliminación van aparte', () => {
     expect(PROPOSITOS_CODIGO).toEqual([
       'RECUPERACION_ASISTIDA',
       'RECUPERACION_CORREO',
       'VERIFICACION_CORREO',
+      'ELIMINACION_CUENTA',
     ]);
     expect(propositosDelGrupo('RECUPERACION_ASISTIDA')).toEqual([
       'RECUPERACION_ASISTIDA',

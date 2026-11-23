@@ -45,7 +45,8 @@ export class AgregarImagenCasoUso {
     try {
       return await this.unidadTrabajo.ejecutar(async () => {
         const producto = await this.productos.bloquearPorId(datos.idProducto);
-        if (producto === null) {
+        // D-60: el producto de otro Vendedor responde 404.
+        if (producto === null || !producto.perteneceA(datos.idVendedor)) {
           throw new ProductoNoEncontradoError();
         }
         const tipo = validarArchivoImagen(datos.contenido);

@@ -25,6 +25,36 @@ const VARIABLES_SMTP = {
   CORREO_REMITENTE: 'CatálogoStock <cuenta.falsa@ejemplo.test>',
 };
 
+describe('RF-USU-07: URL_PUBLICA', () => {
+  it('en desarrollo vale http://localhost:3000 si no se define y acepta una dirección propia', () => {
+    expect(validarVariablesEntorno({ ...VARIABLES_VALIDAS }).URL_PUBLICA).toBe(
+      'http://localhost:3000',
+    );
+    expect(
+      validarVariablesEntorno({ ...VARIABLES_VALIDAS, URL_PUBLICA: 'http://192.168.1.5:3000' })
+        .URL_PUBLICA,
+    ).toBe('http://192.168.1.5:3000');
+  });
+
+  it('es obligatoria y con https:// en producción', () => {
+    const produccion = { ...VARIABLES_VALIDAS, NODE_ENV: 'production' };
+    expect(() => validarVariablesEntorno(produccion)).toThrow('URL_PUBLICA');
+    expect(() =>
+      validarVariablesEntorno({ ...produccion, URL_PUBLICA: 'http://catalogo.ejemplo.test' }),
+    ).toThrow('URL_PUBLICA');
+    expect(
+      validarVariablesEntorno({ ...produccion, URL_PUBLICA: 'https://catalogo.ejemplo.test' })
+        .URL_PUBLICA,
+    ).toBe('https://catalogo.ejemplo.test');
+  });
+
+  it('rechaza un valor que no es una dirección http(s)', () => {
+    expect(() =>
+      validarVariablesEntorno({ ...VARIABLES_VALIDAS, URL_PUBLICA: 'no es una url' }),
+    ).toThrow('URL_PUBLICA');
+  });
+});
+
 describe('Configuración: validación de variables de entorno al arrancar', () => {
   it('acepta variables válidas y convierte los puertos a número', () => {
     const variables = validarVariablesEntorno({ ...VARIABLES_VALIDAS });

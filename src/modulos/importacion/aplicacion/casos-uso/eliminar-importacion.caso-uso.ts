@@ -31,7 +31,8 @@ export class EliminarImportacionCasoUso {
       const importacion = await this.importaciones.bloquearPorId(
         datos.idImportacion,
       );
-      if (importacion === null) {
+      // D-60: la de otro Vendedor responde 404 y no se toca.
+      if (importacion === null || !importacion.perteneceA(datos.idVendedor)) {
         throw new ImportacionNoEncontradaError();
       }
       const eliminada = await eliminarImportacion(

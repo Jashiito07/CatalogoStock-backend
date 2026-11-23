@@ -106,6 +106,7 @@ export class ProductoRepositorioEnMemoria implements ProductoRepositorio {
   ): Promise<Pagina<Producto>> {
     const coincidencias = this.productos
       .filter((p) => !this.eliminados.has(p.id))
+      .filter((p) => !filtro.idVendedor || p.idVendedor === filtro.idVendedor)
       .filter((p) => !filtro.marcaIds || filtro.marcaIds.includes(p.marcaId))
       .filter(
         (p) =>
@@ -139,6 +140,7 @@ export class ProductoRepositorioEnMemoria implements ProductoRepositorio {
         (p) =>
           p.id !== producto.id &&
           !this.eliminados.has(p.id) &&
+          p.idVendedor === producto.idVendedor &&
           p.marcaId === producto.marcaId &&
           p.codigo === producto.codigo,
       )
@@ -165,59 +167,77 @@ export class ProductoRepositorioEnMemoria implements ProductoRepositorio {
     return Promise.resolve(true);
   }
 
-  private vivosDeMarca(marcaId: string): Producto[] {
+  private vivosDeMarca(idVendedor: string, marcaId: string): Producto[] {
     return this.productos.filter(
-      (p) => p.marcaId === marcaId && !this.eliminados.has(p.id),
+      (p) =>
+        p.idVendedor === idVendedor &&
+        p.marcaId === marcaId &&
+        !this.eliminados.has(p.id),
     );
   }
 
   buscarPorCodigos(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<Producto[]> {
     return Promise.resolve(
-      this.vivosDeMarca(marcaId).filter(
+      this.vivosDeMarca(idVendedor, marcaId).filter(
         (p) => p.codigo !== null && codigos.includes(p.codigo),
       ),
     );
   }
 
   async codigosExistentes(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<Set<string>> {
-    const encontrados = await this.buscarPorCodigos(marcaId, codigos);
+    const encontrados = await this.buscarPorCodigos(
+      idVendedor,
+      marcaId,
+      codigos,
+    );
     return new Set(encontrados.flatMap((p) => (p.codigo === null ? [] : [p.codigo])));
   }
 
   buscarSinCodigoPorClaves(
+    idVendedor: string,
     marcaId: string,
     claves: readonly string[],
   ): Promise<Producto[]> {
     return Promise.resolve(
-      this.vivosDeMarca(marcaId).filter(
+      this.vivosDeMarca(idVendedor, marcaId).filter(
         (p) => p.codigo === null && claves.includes(claveDeEmparejamiento(p.nombre)),
       ),
     );
   }
 
-  bloquearSinCodigoPorClave(marcaId: string, clave: string): Promise<Producto[]> {
-    return this.buscarSinCodigoPorClaves(marcaId, [clave]);
+  bloquearSinCodigoPorClave(
+    idVendedor: string,
+    marcaId: string,
+    clave: string,
+  ): Promise<Producto[]> {
+    return this.buscarSinCodigoPorClaves(idVendedor, marcaId, [clave]);
   }
 
   async bloquearPorCodigo(
+    idVendedor: string,
     marcaId: string,
     codigo: string,
   ): Promise<Producto | null> {
-    return (await this.buscarPorCodigos(marcaId, [codigo]))[0] ?? null;
+    return (
+      (await this.buscarPorCodigos(idVendedor, marcaId, [codigo]))[0] ?? null
+    );
   }
 
   listarAusentes(
+    idVendedor: string,
     marcaId: string,
     codigosPresentes: readonly string[],
     paginacion: Paginacion,
   ): Promise<Pagina<Producto>> {
-    const ausentes = this.vivosDeMarca(marcaId)
+    const ausentes = this.vivosDeMarca(idVendedor, marcaId)
       .filter((p) => p.codigo !== null && !codigosPresentes.includes(p.codigo))
       .toSorted(
         (a, b) =>
@@ -233,8 +253,11 @@ export class ProductoRepositorioEnMemoria implements ProductoRepositorio {
     });
   }
 
-  marcarEliminado(id: string): Promise<boolean> {
-    if (!this.productos.some((p) => p.id === id) || this.eliminados.has(id)) {
+  marcarEliminado(id: string, idVendedor: string): Promise<boolean> {
+    if (
+      !this.productos.some((p) => p.id === id && p.idVendedor === idVendedor) ||
+      this.eliminados.has(id)
+    ) {
       return Promise.resolve(false);
     }
     this.eliminados.add(id);
