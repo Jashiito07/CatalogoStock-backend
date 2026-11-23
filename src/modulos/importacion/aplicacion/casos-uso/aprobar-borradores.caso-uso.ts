@@ -116,7 +116,8 @@ export class AprobarBorradoresCasoUso {
     for (let intento = 1; ; intento++) {
       try {
         return await this.unidadTrabajo.ejecutar(async () => {
-          const borrador = await this.borradores.bloquearPorId(id);
+          // D-60: un borrador de otro Vendedor es `NO_ENCONTRADO`.
+          const borrador = await this.borradores.bloquearPorId(id, idVendedor);
           if (borrador === null) {
             return fallo('NO_ENCONTRADO');
           }
@@ -182,9 +183,11 @@ export class AprobarBorradoresCasoUso {
    */
   private async buscarExistente(
     borrador: Borrador,
+    idVendedor: string,
   ): Promise<{ id: string; precio: Dinero; por: EmparejadoPor } | null> {
     if (borrador.codigo !== null) {
       const porCodigo = await this.existentes.bloquearPorCodigo(
+        idVendedor,
         borrador.marcaId,
         borrador.codigo,
       );
@@ -196,6 +199,7 @@ export class AprobarBorradoresCasoUso {
       return null;
     }
     const porNombre = await this.existentes.bloquearSinCodigoPorNombre(
+      idVendedor,
       borrador.marcaId,
       borrador.nombre,
     );
@@ -214,7 +218,7 @@ export class AprobarBorradoresCasoUso {
     accion: AccionAprobacion;
     emparejadoPor: EmparejadoPor | null;
   }> {
-    const existente = await this.buscarExistente(borrador);
+    const existente = await this.buscarExistente(borrador, idVendedor);
     if (existente !== null) {
       if (existente.precio.aTexto() === precio) {
         return {

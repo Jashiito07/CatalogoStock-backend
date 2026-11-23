@@ -1,4 +1,5 @@
 import { type AppPruebas, crearAppPruebas } from './preparacion/app-pruebas.js';
+import { revertirHasta } from './preparacion/migraciones.js';
 
 /**
  * e2e de la migración AgregarCorreoVerificadoYPropositoCodigos (D-50) contra
@@ -43,9 +44,10 @@ describe('Migración del correo (e2e): esquema, reversión y reaplicación', () 
     await contexto.limpiar();
     // Primero se revierten las migraciones posteriores (importación del
     // catálogo, dos; catálogos mensuales, D-57; acciones de clientes, D-53) y después la del correo.
-    for (let i = 0; i < 5; i++) {
-      await contexto.fuente.undoLastMigration({ transaction: 'each' });
-    }
+    await revertirHasta(
+      contexto.fuente,
+      'AgregarCorreoVerificadoYPropositoCodigos1794700000001',
+    );
     expect(await columnas('usuarios')).not.toContain('correo_verificado_en');
     expect(await columnas('codigos_recuperacion')).not.toContain('proposito');
     const acciones = await contexto.fuente.query<{ valor: string }[]>(

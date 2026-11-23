@@ -4,7 +4,7 @@ import type { DirectorioMarcas } from '../puertos/directorio-marcas.puerto.js';
 import type { ImportacionRepositorio } from '../puertos/importacion.repositorio.js';
 import type { VistaImportacion } from '../vista-importacion.js';
 
-/** `GET /productos/importaciones/{id}`: la importación con sus totales (404 si no existe). */
+/** `GET /productos/importaciones/{id}`: la importación con sus totales (404 si no existe o es de otro Vendedor, D-60). */
 export class ObtenerImportacionCasoUso {
   constructor(
     private readonly importaciones: ImportacionRepositorio,
@@ -12,9 +12,10 @@ export class ObtenerImportacionCasoUso {
     private readonly marcas: DirectorioMarcas,
   ) {}
 
-  async ejecutar(id: string): Promise<VistaImportacion> {
+  async ejecutar(id: string, idVendedor: string): Promise<VistaImportacion> {
     const importacion = await this.importaciones.buscarPorId(id);
-    if (importacion === null) {
+    // D-60: la de otro Vendedor responde 404, igual que una que no existe.
+    if (importacion === null || !importacion.perteneceA(idVendedor)) {
       throw new ImportacionNoEncontradaError();
     }
     const marca = await this.marcas.buscarPorId(importacion.marcaId);

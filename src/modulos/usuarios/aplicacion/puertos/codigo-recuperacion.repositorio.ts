@@ -51,6 +51,13 @@ export interface CodigoRecuperacionRepositorio {
   guardar(codigo: CodigoRecuperacion): Promise<void>;
 
   /**
+   * Borra **todos** los códigos del usuario, de cualquier propósito (RF-USU-06:
+   * al eliminar la cuenta no queda ningún código pendiente). Dentro de la
+   * transacción en curso si la hay. Devuelve cuántos borró.
+   */
+  eliminarDeUsuario(idUsuario: string): Promise<number>;
+
+  /**
    * Vencimiento del código de **recuperación asistida** vigente de cada
    * Cliente indicado (sin usar, sin invalidar y sin vencer en `ahora`), para
    * la sección «Clientes» del panel. Los Clientes sin código vigente no

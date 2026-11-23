@@ -31,10 +31,12 @@ function agrupar<T>(
  *   Si hay varios, `ambiguo` y no se empareja. Nunca se empareja por nombre con
  *   un producto que tiene código ni un borrador con código.
  *
- * Una consulta por marca y por tipo de emparejamiento. Devuelve un mapa
+ * Solo cuenta los productos del Vendedor (D-60). Una consulta por marca y por
+ * tipo de emparejamiento. Devuelve un mapa
  * `idBorrador → Emparejamiento` solo con los pendientes; todos tienen entrada.
  */
 export async function emparejarBorradores(
+  idVendedor: string,
   borradores: readonly Borrador[],
   productos: ProductosExistentes,
 ): Promise<Map<string, Emparejamiento>> {
@@ -51,9 +53,11 @@ export async function emparejarBorradores(
 
   const porCodigo = new Map<string, ProductoExistente>();
   for (const [marcaId, codigos] of codigosPorMarca) {
-    for (const producto of await productos.buscarPorCodigos(marcaId, [
-      ...codigos,
-    ])) {
+    for (const producto of await productos.buscarPorCodigos(
+      idVendedor,
+      marcaId,
+      [...codigos],
+    )) {
       porCodigo.set(`${marcaId}:${producto.codigo}`, {
         id: producto.id,
         nombre: producto.nombre,
@@ -65,9 +69,11 @@ export async function emparejarBorradores(
 
   const porNombre = new Map<string, ProductoExistente[]>();
   for (const [marcaId, nombres] of nombresPorMarca) {
-    for (const producto of await productos.buscarSinCodigoPorNombres(marcaId, [
-      ...nombres,
-    ])) {
+    for (const producto of await productos.buscarSinCodigoPorNombres(
+      idVendedor,
+      marcaId,
+      [...nombres],
+    )) {
       const clave = `${marcaId}:${claveDeEmparejamiento(producto.nombre)}`;
       const lista = porNombre.get(clave) ?? [];
       lista.push({

@@ -16,6 +16,7 @@ import {
   LETRAS_SIN_TILDE,
 } from '../../dominio/busqueda-clientes.js';
 import type { Correo } from '../../dominio/correo.js';
+import type { DatosAnonimos } from '../../dominio/cuenta-eliminada.js';
 import {
   CorreoYaRegistradoError,
   VendedorYaExisteError,
@@ -144,6 +145,32 @@ export class UsuarioRepositorioTypeorm implements UsuarioRepositorio {
     return (resultado.affected ?? 0) > 0;
   }
 
+  async anonimizarCuenta(
+    idUsuario: string,
+    datos: DatosAnonimos,
+    hashClave: string,
+    ahora: Date,
+  ): Promise<boolean> {
+    const resultado = await this.filas
+      .createQueryBuilder()
+      .update(UsuarioOrmEntity)
+      .set({
+        nombre: datos.nombre,
+        correo: datos.correo,
+        telefono: datos.telefono,
+        hashClave,
+        activo: false,
+        correoVerificadoEn: null,
+        eliminadoEn: ahora,
+        fechaActualizacion: ahora,
+      })
+      .where(`id = :idUsuario AND rol = 'CLIENTE' AND eliminado_en IS NULL`, {
+        idUsuario,
+      })
+      .execute();
+    return (resultado.affected ?? 0) > 0;
+  }
+
   /**
    * Búsqueda sin mayúsculas ni tildes con `translate(lower(…))` y la misma
    * tabla de letras que el dominio (sin la extensión `unaccent`). Los
@@ -157,7 +184,9 @@ export class UsuarioRepositorioTypeorm implements UsuarioRepositorio {
   ): Promise<PaginaUsuarios> {
     const consulta = this.filas
       .createQueryBuilder('u')
-      .where('u.rol = :rol', { rol: 'CLIENTE' });
+      // RF-USU-06: las cuentas eliminadas (anonimizadas) no aparecen en la lista.
+      .where('u.rol = :rol', { rol: 'CLIENTE' })
+      .andWhere('u.eliminadoEn IS NULL');
 
     if (activo !== undefined) {
       consulta.andWhere('u.activo = :activo', { activo });

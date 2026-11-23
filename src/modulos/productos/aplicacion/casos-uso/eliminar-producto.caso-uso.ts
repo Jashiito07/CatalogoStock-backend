@@ -26,8 +26,10 @@ export class EliminarProductoCasoUso {
 
   async ejecutar(datos: DatosEliminarProducto): Promise<void> {
     await this.unidadTrabajo.ejecutar(async () => {
+      // D-60: solo elimina los productos del Vendedor; los de otro responden 404.
       const eliminado = await this.productos.marcarEliminado(
         datos.idProducto,
+        datos.idVendedor,
         this.reloj.ahora(),
       );
       if (!eliminado) {

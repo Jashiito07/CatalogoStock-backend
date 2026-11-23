@@ -18,7 +18,10 @@ export class CalculadorTotalesImportacion {
 
   async calcular(importacion: Importacion): Promise<TotalesImportacion> {
     const base = await this.borradores.totales(importacion.id);
-    const actualizaran = await this.contarQueActualizan(importacion.id);
+    const actualizaran = await this.contarQueActualizan(
+      importacion.idVendedor,
+      importacion.id,
+    );
     return {
       ...base,
       actualizaran,
@@ -31,7 +34,10 @@ export class CalculadorTotalesImportacion {
    * Pendientes que actualizarán un producto: los que traen un código que ya
    * existe en la marca del borrador y los sin código emparejados por nombre.
    */
-  private async contarQueActualizan(idImportacion: string): Promise<number> {
+  private async contarQueActualizan(
+    idVendedor: string,
+    idImportacion: string,
+  ): Promise<number> {
     const pendientes = await this.borradores.pendientesPorCodigo(idImportacion);
     const codigosPorMarca = new Map<string, Set<string>>();
     for (const { marcaId, codigo } of pendientes) {
@@ -43,7 +49,7 @@ export class CalculadorTotalesImportacion {
     for (const [marcaId, codigos] of codigosPorMarca) {
       existentesPorMarca.set(
         marcaId,
-        await this.productos.codigosExistentes(marcaId, [...codigos]),
+        await this.productos.codigosExistentes(idVendedor, marcaId, [...codigos]),
       );
     }
     const porCodigo = pendientes.reduce(
@@ -51,7 +57,10 @@ export class CalculadorTotalesImportacion {
         existentesPorMarca.get(marcaId)?.has(codigo) ? suma + cantidad : suma,
       0,
     );
-    return porCodigo + (await this.contarQueActualizanPorNombre(idImportacion));
+    return (
+      porCodigo +
+      (await this.contarQueActualizanPorNombre(idVendedor, idImportacion))
+    );
   }
 
   /**
@@ -60,6 +69,7 @@ export class CalculadorTotalesImportacion {
    * dudoso cuentan como `nuevos`.
    */
   private async contarQueActualizanPorNombre(
+    idVendedor: string,
     idImportacion: string,
   ): Promise<number> {
     const sinCodigo = await this.borradores.pendientesSinCodigo(idImportacion);
@@ -74,6 +84,7 @@ export class CalculadorTotalesImportacion {
     const productosPorClave = new Map<string, number>();
     for (const [marcaId, nombres] of nombresPorMarca) {
       for (const producto of await this.productos.buscarSinCodigoPorNombres(
+        idVendedor,
         marcaId,
         [...nombres],
       )) {
@@ -94,6 +105,7 @@ export class CalculadorTotalesImportacion {
     }
     const codigos = await this.borradores.codigosDeImportacion(importacion.id);
     const pagina = await this.productos.listarAusentes(
+      importacion.idVendedor,
       importacion.marcaId,
       codigos,
       { pagina: 1, tamanio: 1 },

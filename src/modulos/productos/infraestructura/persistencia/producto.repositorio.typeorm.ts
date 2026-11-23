@@ -85,6 +85,11 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
     consulta: SelectQueryBuilder<ProductoOrmEntity>,
     filtro: FiltroProductos,
   ): void {
+    if (filtro.idVendedor !== undefined) {
+      consulta.andWhere('producto.idVendedor = :idVendedor', {
+        idVendedor: filtro.idVendedor,
+      });
+    }
     if (filtro.marcaIds !== undefined) {
       consulta.andWhere('producto.idMarca IN (:...marcaIds)', {
         marcaIds: [...filtro.marcaIds],
@@ -137,6 +142,7 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
   }
 
   async buscarPorCodigos(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<Producto[]> {
@@ -146,6 +152,7 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
     const filas = await this.filas
       .createQueryBuilder('producto')
       .where('producto.eliminadoEn IS NULL')
+      .andWhere('producto.idVendedor = :idVendedor', { idVendedor })
       .andWhere('producto.idMarca = :marcaId', { marcaId })
       .andWhere('producto.codigo = ANY(CAST(:codigos AS varchar[]))', {
         codigos: [...codigos],
@@ -155,6 +162,7 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
   }
 
   async codigosExistentes(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<Set<string>> {
@@ -165,6 +173,7 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
       .createQueryBuilder('producto')
       .select('producto.codigo', 'codigo')
       .where('producto.eliminadoEn IS NULL')
+      .andWhere('producto.idVendedor = :idVendedor', { idVendedor })
       .andWhere('producto.idMarca = :marcaId', { marcaId })
       .andWhere('producto.codigo = ANY(CAST(:codigos AS varchar[]))', {
         codigos: [...codigos],
@@ -174,11 +183,12 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
   }
 
   async bloquearPorCodigo(
+    idVendedor: string,
     marcaId: string,
     codigo: string,
   ): Promise<Producto | null> {
     const fila = await this.filas.findOne({
-      where: { idMarca: marcaId, codigo, eliminadoEn: IsNull() },
+      where: { idVendedor, idMarca: marcaId, codigo, eliminadoEn: IsNull() },
       lock: { mode: 'pessimistic_write' },
     });
     return fila ? ProductoMapeador.aDominio(fila) : null;
@@ -189,6 +199,7 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
     `trim(both ' ' from regexp_replace(producto.nombreBusqueda, '[^a-z0-9]+', ' ', 'g'))`;
 
   async buscarSinCodigoPorClaves(
+    idVendedor: string,
     marcaId: string,
     claves: readonly string[],
   ): Promise<Producto[]> {
@@ -199,6 +210,7 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
       .createQueryBuilder('producto')
       .where('producto.eliminadoEn IS NULL')
       .andWhere('producto.codigo IS NULL')
+      .andWhere('producto.idVendedor = :idVendedor', { idVendedor })
       .andWhere('producto.idMarca = :marcaId', { marcaId })
       .andWhere(
         `${ProductoRepositorioTypeorm.CLAVE_SQL} = ANY(CAST(:claves AS varchar[]))`,
@@ -209,6 +221,7 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
   }
 
   async bloquearSinCodigoPorClave(
+    idVendedor: string,
     marcaId: string,
     clave: string,
   ): Promise<Producto[]> {
@@ -216,13 +229,14 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
     // aprobaciones crearían dos productos al no haber fila que bloquear.
     await this.filas.manager.query(
       'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-      [`productos_nombre:${marcaId}:${clave}`],
+      [`productos_nombre:${idVendedor}:${marcaId}:${clave}`],
     );
     const filas = await this.filas
       .createQueryBuilder('producto')
       .setLock('pessimistic_write')
       .where('producto.eliminadoEn IS NULL')
       .andWhere('producto.codigo IS NULL')
+      .andWhere('producto.idVendedor = :idVendedor', { idVendedor })
       .andWhere('producto.idMarca = :marcaId', { marcaId })
       .andWhere(`${ProductoRepositorioTypeorm.CLAVE_SQL} = :clave`, { clave })
       .getMany();
@@ -230,6 +244,7 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
   }
 
   async listarAusentes(
+    idVendedor: string,
     marcaId: string,
     codigosPresentes: readonly string[],
     paginacion: Paginacion,
@@ -237,6 +252,7 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
     const [filas, total] = await this.filas
       .createQueryBuilder('producto')
       .where('producto.eliminadoEn IS NULL')
+      .andWhere('producto.idVendedor = :idVendedor', { idVendedor })
       .andWhere('producto.idMarca = :marcaId', { marcaId })
       .andWhere('producto.codigo IS NOT NULL')
       .andWhere('NOT (producto.codigo = ANY(CAST(:codigos AS varchar[])))', {
@@ -255,9 +271,13 @@ export class ProductoRepositorioTypeorm implements ProductoRepositorio {
     };
   }
 
-  async marcarEliminado(id: string, ahora: Date): Promise<boolean> {
+  async marcarEliminado(
+    id: string,
+    idVendedor: string,
+    ahora: Date,
+  ): Promise<boolean> {
     const resultado = await this.filas.update(
-      { id, eliminadoEn: IsNull() },
+      { id, idVendedor, eliminadoEn: IsNull() },
       { eliminadoEn: ahora, fechaActualizacion: ahora },
     );
     return (resultado.affected ?? 0) > 0;

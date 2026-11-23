@@ -226,10 +226,12 @@ export class ProductosController {
   @Put(':id/imagenes/orden')
   @Roles('VENDEDOR')
   async reordenar(
+    @UsuarioActual() actor: ActorAutenticado,
     @Param('id', idUuid) idProducto: string,
     @Body() cuerpo: ReordenarImagenesDto,
   ): Promise<RespuestaImagen[]> {
     const imagenes = await this.reordenarImagenes.ejecutar({
+      idVendedor: actor.id,
       idProducto,
       ids: cuerpo.ids.map((id) => id.toLowerCase()),
     });

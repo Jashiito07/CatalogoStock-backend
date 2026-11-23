@@ -23,15 +23,22 @@ import {
  *   importa la entidad de otro módulo.
  * - `codigo` (D-57, migración AgregarCodigoProductoYCicloImportacion): «CÓD.»
  *   o «Ref.» del catálogo de la marca, letras y dígitos (1 a 20), nulo si no
- *   tiene. Único por marca entre los productos **no eliminados** (índice
- *   único parcial): un producto eliminado no bloquea el código.
+ *   tiene. Único por Vendedor y marca entre los productos **no eliminados**
+ *   (índice único parcial): un producto eliminado no bloquea el código.
+ * - `id_vendedor` (D-60, migración AgregarIdVendedorProductosEImportaciones):
+ *   Vendedor dueño del producto; clave foránea a `usuarios` por nombre de tabla.
+ *   Nunca se expone en la API.
  */
 @Entity('productos')
 @ForeignKey('marcas', ['idMarca'], ['id'], { name: 'fk_productos_marca' })
+@ForeignKey('usuarios', ['idVendedor'], ['id'], {
+  name: 'fk_productos_vendedor',
+})
 @Index('ix_productos_id_marca', ['idMarca'])
+@Index('ix_productos_id_vendedor', ['idVendedor'])
 @Index('ix_productos_nombre_busqueda', ['nombreBusqueda'])
 @Index('ix_productos_eliminado_en', ['eliminadoEn'])
-@Index('uq_productos_marca_codigo', ['idMarca', 'codigo'], {
+@Index('uq_productos_marca_codigo', ['idVendedor', 'idMarca', 'codigo'], {
   unique: true,
   where: '"eliminado_en" IS NULL AND "codigo" IS NOT NULL',
 })
@@ -50,6 +57,9 @@ export class ProductoOrmEntity {
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   codigo: string | null;
+
+  @Column({ name: 'id_vendedor', type: 'uuid' })
+  idVendedor: string;
 
   @Column({ name: 'id_marca', type: 'uuid' })
   idMarca: string;

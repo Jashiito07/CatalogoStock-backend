@@ -1,4 +1,5 @@
 import { type AppPruebas, crearAppPruebas } from './preparacion/app-pruebas.js';
+import { revertirHasta } from './preparacion/migraciones.js';
 
 /**
  * e2e de las migraciones de la importación del catálogo (CrearTablasImportacionProducto y
@@ -82,9 +83,10 @@ describe('Migración de la importación del catálogo (e2e): tablas, enumerados,
     // bitácora): la base de pruebas se vacía antes.
     await contexto.limpiar();
     // La de los catálogos mensuales (D-57) va encima de las dos de la importación.
-    await contexto.fuente.undoLastMigration({ transaction: 'each' });
-    await contexto.fuente.undoLastMigration({ transaction: 'each' });
-    await contexto.fuente.undoLastMigration({ transaction: 'each' });
+    await revertirHasta(
+      contexto.fuente,
+      'CrearTablasImportacionProducto1794900000001',
+    );
 
     expect(await tablas()).not.toContain('borradores_producto');
     expect(await tablas()).not.toContain('importaciones_producto');

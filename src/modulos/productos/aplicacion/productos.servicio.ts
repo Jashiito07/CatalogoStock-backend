@@ -42,42 +42,56 @@ export class ProductosServicio {
     return vista.producto;
   }
 
-  /** Los productos no eliminados de la marca con alguno de esos códigos (D-57). */
+  /** Los productos no eliminados del Vendedor en la marca con alguno de esos códigos (D-57, D-60). */
   async buscarPorCodigos(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<ProductoPublico[]> {
-    const encontrados = await this.productos.buscarPorCodigos(marcaId, codigos);
+    const encontrados = await this.productos.buscarPorCodigos(
+      idVendedor,
+      marcaId,
+      codigos,
+    );
     return encontrados.map((producto) => producto.aPublico());
   }
 
-  /** Entre `codigos`, los que ya tienen un producto no eliminado en la marca (D-57). */
+  /** Entre `codigos`, los que ya tienen un producto no eliminado del Vendedor en la marca (D-57, D-60). */
   codigosExistentes(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<Set<string>> {
-    return this.productos.codigosExistentes(marcaId, codigos);
+    return this.productos.codigosExistentes(idVendedor, marcaId, codigos);
   }
 
   /**
-   * El producto no eliminado de la marca con ese código, **bloqueado** hasta el
-   * fin de la transacción en curso: serializa las aprobaciones del mismo
-   * código (D-57). Llamar solo dentro de una unidad de trabajo.
+   * El producto no eliminado del Vendedor en la marca con ese código,
+   * **bloqueado** hasta el fin de la transacción en curso: serializa las
+   * aprobaciones del mismo código (D-57, D-60). Llamar solo dentro de una
+   * unidad de trabajo.
    */
   async bloquearPorCodigo(
+    idVendedor: string,
     marcaId: string,
     codigo: string,
   ): Promise<ProductoPublico | null> {
-    const producto = await this.productos.bloquearPorCodigo(marcaId, codigo);
+    const producto = await this.productos.bloquearPorCodigo(
+      idVendedor,
+      marcaId,
+      codigo,
+    );
     return producto === null ? null : producto.aPublico();
   }
 
   /**
-   * Productos no eliminados de la marca **sin código** cuyo nombre coincide con
-   * alguno de `nombres` sin distinguir mayúsculas, tildes ni signos (D-57,
-   * emparejado por nombre). Nunca devuelve productos que tienen código.
+   * Productos no eliminados del Vendedor en la marca **sin código** cuyo nombre
+   * coincide con alguno de `nombres` sin distinguir mayúsculas, tildes ni
+   * signos (D-57, emparejado por nombre). Nunca devuelve productos que tienen
+   * código.
    */
   async buscarSinCodigoPorNombres(
+    idVendedor: string,
     marcaId: string,
     nombres: readonly string[],
   ): Promise<ProductoPublico[]> {
@@ -85,6 +99,7 @@ export class ProductosServicio {
       ...new Set(nombres.map(claveDeEmparejamiento).filter((c) => c !== '')),
     ];
     const encontrados = await this.productos.buscarSinCodigoPorClaves(
+      idVendedor,
       marcaId,
       claves,
     );
@@ -97,6 +112,7 @@ export class ProductosServicio {
    * quienes aprueban el mismo nombre). Llamar solo dentro de una unidad de trabajo.
    */
   async bloquearSinCodigoPorNombre(
+    idVendedor: string,
     marcaId: string,
     nombre: string,
   ): Promise<ProductoPublico[]> {
@@ -104,9 +120,9 @@ export class ProductosServicio {
     if (clave === '') {
       return [];
     }
-    return (await this.productos.bloquearSinCodigoPorClave(marcaId, clave)).map(
-      (producto) => producto.aPublico(),
-    );
+    return (
+      await this.productos.bloquearSinCodigoPorClave(idVendedor, marcaId, clave)
+    ).map((producto) => producto.aPublico());
   }
 
   /**
@@ -132,11 +148,13 @@ export class ProductosServicio {
    * en `codigosPresentes`: «ausentes» de un catálogo nuevo (D-57). Solo lectura.
    */
   async listarAusentes(
+    idVendedor: string,
     marcaId: string,
     codigosPresentes: readonly string[],
     paginacion: Paginacion,
   ): Promise<Pagina<ProductoPublico>> {
     const pagina = await this.productos.listarAusentes(
+      idVendedor,
       marcaId,
       codigosPresentes,
       paginacion,

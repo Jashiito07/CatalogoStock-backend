@@ -11,7 +11,8 @@ import { VIGENCIA_CODIGO_MINUTOS } from './codigo-recuperacion.js';
 
 export const ASUNTO_CORREO_CODIGO = 'Tu código de CatálogoStock';
 
-export type FinalidadCodigoCorreo = 'RECUPERACION' | 'VERIFICACION';
+export type FinalidadCodigoCorreo =
+  'RECUPERACION' | 'VERIFICACION' | 'ELIMINACION';
 
 export interface CorreoCodigo {
   asunto: string;
@@ -26,6 +27,8 @@ const INTRODUCCION: Readonly<Record<FinalidadCodigoCorreo, string>> = {
     'Recibimos una solicitud para restablecer tu clave de CatálogoStock.',
   VERIFICACION:
     'Para verificar tu correo en CatálogoStock, escribe este código en la aplicación.',
+  ELIMINACION:
+    'Recibimos una solicitud para eliminar tu cuenta de CatálogoStock. Si continúas, tus datos personales se anonimizarán y no podrás recuperar la cuenta.',
 };
 
 const SI_NO_LO_PEDISTE: Readonly<Record<FinalidadCodigoCorreo, string>> = {
@@ -33,6 +36,8 @@ const SI_NO_LO_PEDISTE: Readonly<Record<FinalidadCodigoCorreo, string>> = {
     'Si no lo pediste, ignora este mensaje: tu clave no cambiará. Si te preocupa tu cuenta, avisa al vendedor.',
   VERIFICACION:
     'Si no lo pediste, ignora este mensaje: no se hará ningún cambio en tu cuenta.',
+  ELIMINACION:
+    'Si no lo pediste, ignora este mensaje: tu cuenta no se eliminará. Si te preocupa tu cuenta, cambia tu clave.',
 };
 
 /** Escapa los caracteres con significado en HTML (defensa en profundidad: el código solo trae dígitos). */

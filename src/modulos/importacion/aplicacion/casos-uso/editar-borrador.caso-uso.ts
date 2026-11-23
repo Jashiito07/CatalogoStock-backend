@@ -13,6 +13,8 @@ import type { DirectorioMarcas } from '../puertos/directorio-marcas.puerto.js';
 import type { ProductosExistentes } from '../puertos/productos-existentes.puerto.js';
 
 export interface DatosEditarBorrador {
+  /** Vendedor del token: solo edita borradores de sus importaciones (D-60). */
+  idVendedor: string;
   idBorrador: string;
   cambios: CambiosBorrador;
 }
@@ -36,7 +38,10 @@ export class EditarBorradorCasoUso {
 
   async ejecutar(datos: DatosEditarBorrador): Promise<BorradorPublico> {
     return this.unidadTrabajo.ejecutar(async () => {
-      const actual = await this.borradores.bloquearPorId(datos.idBorrador);
+      const actual = await this.borradores.bloquearPorId(
+        datos.idBorrador,
+        datos.idVendedor,
+      );
       if (actual === null) {
         throw new BorradorNoEncontradoError();
       }
@@ -59,7 +64,11 @@ export class EditarBorradorCasoUso {
         await this.borradores.guardar(borrador);
       }
       // D-57: al cambiar la marca puede cambiar el producto que se actualizará.
-      const emparejados = await emparejarBorradores([borrador], this.productos);
+      const emparejados = await emparejarBorradores(
+        datos.idVendedor,
+        [borrador],
+        this.productos,
+      );
       const emparejamiento = emparejados.get(borrador.id);
       return borrador.aPublico(
         emparejamiento?.existente ?? null,

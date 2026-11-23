@@ -21,6 +21,7 @@ const RESTRICCION_HUELLA = 'uq_importaciones_producto_huella';
 function aDominio(fila: ImportacionOrmEntity): Importacion {
   return Importacion.reconstituir({
     id: fila.id,
+    idVendedor: fila.idVendedor,
     nombreArchivo: fila.nombreArchivo,
     huella: fila.huella,
     marcaId: fila.idMarca,
@@ -47,6 +48,7 @@ export class ImportacionRepositorioTypeorm implements ImportacionRepositorio {
     try {
       await this.filas.insert({
         id: importacion.id,
+        idVendedor: importacion.idVendedor,
         nombreArchivo: importacion.nombreArchivo,
         huella: importacion.huella,
         idMarca: importacion.marcaId,
@@ -76,20 +78,27 @@ export class ImportacionRepositorioTypeorm implements ImportacionRepositorio {
     return fila ? aDominio(fila) : null;
   }
 
-  async buscarPorHuella(huella: string): Promise<Importacion | null> {
-    const fila = await this.filas.findOneBy({ huella });
+  async buscarPorHuella(
+    idVendedor: string,
+    huella: string,
+  ): Promise<Importacion | null> {
+    const fila = await this.filas.findOneBy({ idVendedor, huella });
     return fila ? aDominio(fila) : null;
   }
 
-  async archivarVigentesDeMarca(marcaId: string, ahora: Date): Promise<number> {
-    // Una subida por marca a la vez: sin esto, dos subidas simultáneas
-    // dejarían dos vigentes y la segunda fallaría contra el índice único.
+  async archivarVigentesDeMarca(
+    idVendedor: string,
+    marcaId: string,
+    ahora: Date,
+  ): Promise<number> {
+    // Una subida por Vendedor y marca a la vez: sin esto, dos subidas
+    // simultáneas dejarían dos vigentes y la segunda fallaría contra el índice único.
     await this.filas.manager.query(
       'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-      [`importaciones_producto:${marcaId}`],
+      [`importaciones_producto:${idVendedor}:${marcaId}`],
     );
     const resultado = await this.filas.update(
-      { idMarca: marcaId, estado: 'VIGENTE' },
+      { idVendedor, idMarca: marcaId, estado: 'VIGENTE' },
       { estado: 'ARCHIVADA', archivadaEn: ahora },
     );
     return resultado.affected ?? 0;
@@ -99,7 +108,9 @@ export class ImportacionRepositorioTypeorm implements ImportacionRepositorio {
     filtro: FiltroImportaciones,
     paginacion: Paginacion,
   ): Promise<Pagina<Importacion>> {
-    const donde: FindOptionsWhere<ImportacionOrmEntity> = {};
+    const donde: FindOptionsWhere<ImportacionOrmEntity> = {
+      idVendedor: filtro.idVendedor,
+    };
     if (filtro.estado !== undefined) {
       donde.estado = filtro.estado;
     }

@@ -50,6 +50,26 @@ export class ConfirmacionCorreoDto {
   codigo: string;
 }
 
+/** Cuerpo de `POST /api/v1/usuarios/yo/eliminacion` (RF-USU-06): la clave actual. */
+export class EliminacionCuentaDto {
+  /** Solo se exige que venga; si no coincide → 422 `CLAVE_ACTUAL_INCORRECTA`. */
+  @IsString({ message: MENSAJE_FALTA_CLAVE_ACTUAL })
+  @IsNotEmpty({ message: MENSAJE_FALTA_CLAVE_ACTUAL })
+  @MaxLength(200, { message: MENSAJE_FALTA_CLAVE_ACTUAL })
+  clave: string;
+}
+
+/** Cuerpo de `POST /api/v1/autenticacion/eliminacion` (RF-USU-06): correo y código. */
+export class ConfirmacionEliminacionDto {
+  @CumpleReglaDominio((valor) => Correo.crear(valor), MENSAJE_CORREO_INVALIDO)
+  correo: string;
+
+  /** Exactamente 6 dígitos (`000000` a `999999`). */
+  @IsString({ message: MENSAJE_CODIGO_FORMATO })
+  @Matches(/^\d{6}$/, { message: MENSAJE_CODIGO_FORMATO })
+  codigo: string;
+}
+
 /** Cuerpo de `POST /api/v1/usuarios/yo/clave` (RF-USU-05, cambio con sesión). */
 export class CambioClaveDto {
   /** Solo se exige que venga; si no coincide → 422 `CLAVE_ACTUAL_INCORRECTA`. */

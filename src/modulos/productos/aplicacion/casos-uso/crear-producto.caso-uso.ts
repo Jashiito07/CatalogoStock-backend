@@ -42,6 +42,8 @@ export class CrearProductoCasoUso {
     return this.unidadTrabajo.ejecutar(async () => {
       const producto = Producto.crear({
         id: this.generadorId.generar(),
+        // D-60: el dueño es el Vendedor autenticado, nunca un dato del cliente.
+        idVendedor: datos.idVendedor,
         nombre: datos.nombre,
         codigo: datos.codigo,
         marcaId: datos.marcaId,

@@ -3,11 +3,14 @@ import { errorDeCampo } from './error-campo.js';
 export const MENSAJE_TELEFONO_INVALIDO =
   'Ingrese un celular de Ecuador válido, por ejemplo 0991234567.';
 
-/** Celular nacional: `09` seguido de 8 dígitos (10 dígitos en total). */
+/** Celular nacional: `09` seguido de 8 dígitos (9 dígitos en total). */
 const FORMATO_NACIONAL = /^09(\d{8})$/;
 
 /** Celular internacional E.164 de Ecuador: `+5939` seguido de 8 dígitos. */
 const FORMATO_E164 = /^\+5939(\d{8})$/;
+
+/** Teléfono anonimizado de una cuenta eliminada (RF-USU-06): `+000` y 9 dígitos. */
+const FORMATO_ANONIMO = /^\+000\d{9}$/;
 
 /** Separadores que se ignoran al leer el número. */
 const SEPARADORES = /[\s-]/g;
@@ -36,6 +39,18 @@ export class Telefono {
       return new Telefono(`+5939${internacional[1]}`);
     }
     throw errorDeCampo('telefono', MENSAJE_TELEFONO_INVALIDO);
+  }
+
+  /**
+   * Valor no entregable de una cuenta eliminada (RF-USU-06): `+000` y 10
+   * dígitos. No es un celular de Ecuador válido; solo lo producen la
+   * eliminación de la cuenta y la lectura de una cuenta ya eliminada.
+   */
+  static deCuentaEliminada(entrada: string): Telefono {
+    if (!FORMATO_ANONIMO.test(entrada)) {
+      throw errorDeCampo('telefono', MENSAJE_TELEFONO_INVALIDO);
+    }
+    return new Telefono(entrada);
   }
 
   esIgualA(otro: Telefono): boolean {

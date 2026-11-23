@@ -75,7 +75,7 @@ describe('D-57: código del producto y servicio público para los catálogos men
     await expect(crear({ codigo: '43873', nombre: 'Nuevo' })).resolves.toMatchObject({
       codigo: '43873',
     });
-    expect(await servicio.codigosExistentes(ID_MARCA_ACTIVA, ['43873'])).toEqual(
+    expect(await servicio.codigosExistentes(ID_VENDEDOR, ID_MARCA_ACTIVA, ['43873'])).toEqual(
       new Set(['43873']),
     );
   });
@@ -85,12 +85,12 @@ describe('D-57: código del producto y servicio público para los catálogos men
     const borrado = await crear({ codigo: '2', nombre: 'Borrado' });
     repositorio.eliminados.add(borrado.id);
 
-    expect((await servicio.buscarPorCodigos(ID_MARCA_ACTIVA, ['1', '2'])).map((p) => p.id)).toEqual([
+    expect((await servicio.buscarPorCodigos(ID_VENDEDOR, ID_MARCA_ACTIVA, ['1', '2'])).map((p) => p.id)).toEqual([
       vivo.id,
     ]);
-    expect((await servicio.bloquearPorCodigo(ID_MARCA_ACTIVA, '1'))?.id).toBe(vivo.id);
-    expect(await servicio.bloquearPorCodigo(ID_MARCA_ACTIVA, '2')).toBeNull();
-    expect(await servicio.buscarPorCodigos(ID_MARCA_ACTIVA, [])).toEqual([]);
+    expect((await servicio.bloquearPorCodigo(ID_VENDEDOR, ID_MARCA_ACTIVA, '1'))?.id).toBe(vivo.id);
+    expect(await servicio.bloquearPorCodigo(ID_VENDEDOR, ID_MARCA_ACTIVA, '2')).toBeNull();
+    expect(await servicio.buscarPorCodigos(ID_VENDEDOR, ID_MARCA_ACTIVA, [])).toEqual([]);
   });
 
   it('D-57: buscarSinCodigoPorNombres devuelve solo productos sin código, de la marca y no eliminados, sin distinguir mayúsculas, tildes ni signos', async () => {
@@ -100,18 +100,18 @@ describe('D-57: código del producto y servicio público para los catálogos men
     repositorio.eliminados.add(borrado.id);
     await crear({ nombre: 'Otro Producto' });
 
-    const encontrados = await servicio.buscarSinCodigoPorNombres(ID_MARCA_ACTIVA, [
+    const encontrados = await servicio.buscarSinCodigoPorNombres(ID_VENDEDOR, ID_MARCA_ACTIVA, [
       'jabon (liquido) AVENA!',
     ]);
 
     expect(encontrados.map((p) => p.id)).toEqual([sinCodigo.id]);
-    expect(await servicio.buscarSinCodigoPorNombres(ID_MARCA_ACTIVA, ['¡¡¡', ''])).toEqual([]);
+    expect(await servicio.buscarSinCodigoPorNombres(ID_VENDEDOR, ID_MARCA_ACTIVA, ['¡¡¡', ''])).toEqual([]);
     expect(
-      (await servicio.bloquearSinCodigoPorNombre(ID_MARCA_ACTIVA, 'Jabón Líquido Avena')).map(
+      (await servicio.bloquearSinCodigoPorNombre(ID_VENDEDOR, ID_MARCA_ACTIVA, 'Jabón Líquido Avena')).map(
         (p) => p.id,
       ),
     ).toEqual([sinCodigo.id]);
-    expect(await servicio.bloquearSinCodigoPorNombre(ID_MARCA_ACTIVA, '...')).toEqual([]);
+    expect(await servicio.bloquearSinCodigoPorNombre(ID_VENDEDOR, ID_MARCA_ACTIVA, '...')).toEqual([]);
   });
 
   it('PA-07, D-57: actualizarPrecio cambia solo el precio y la bitácora guarda precioAnterior y precioNuevo', async () => {
@@ -166,7 +166,7 @@ describe('D-57: código del producto y servicio público para los catálogos men
     await crear({ codigo: '2', nombre: 'Producto B' });
     await crear({ nombre: 'Sin código' });
 
-    const pagina = await servicio.listarAusentes(ID_MARCA_ACTIVA, ['1'], crearPaginacion());
+    const pagina = await servicio.listarAusentes(ID_VENDEDOR, ID_MARCA_ACTIVA, ['1'], crearPaginacion());
 
     expect(pagina.total).toBe(1);
     expect(pagina.elementos[0]).toMatchObject({ nombre: 'Producto B', codigo: '2' });

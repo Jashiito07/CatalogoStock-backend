@@ -9,6 +9,8 @@ import type { ImagenRepositorio } from '../puertos/imagen.repositorio.js';
 import type { ProductoRepositorio } from '../puertos/producto.repositorio.js';
 
 export interface DatosReordenarImagenes {
+  /** Vendedor del token (ya verificado por `@Roles('VENDEDOR')`). */
+  idVendedor: string;
   idProducto: string;
   /** Todas las imágenes del producto, en el nuevo orden (la primera es la principal). */
   ids: readonly string[];
@@ -29,7 +31,8 @@ export class ReordenarImagenesCasoUso {
   async ejecutar(datos: DatosReordenarImagenes): Promise<ImagenPublica[]> {
     return this.unidadTrabajo.ejecutar(async () => {
       const producto = await this.productos.bloquearPorId(datos.idProducto);
-      if (producto === null) {
+      // D-60: el producto de otro Vendedor responde 404.
+      if (producto === null || !producto.perteneceA(datos.idVendedor)) {
         throw new ProductoNoEncontradoError();
       }
       const actuales = await this.imagenes.listarPorProducto(producto.id);

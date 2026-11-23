@@ -7,6 +7,7 @@ export const ProductoMapeador = {
   aDominio(fila: ProductoOrmEntity): Producto {
     return Producto.reconstituir({
       id: fila.id,
+      idVendedor: fila.idVendedor,
       nombre: fila.nombre,
       codigo: fila.codigo,
       marcaId: fila.idMarca,
@@ -22,6 +23,7 @@ export const ProductoMapeador = {
   aPersistencia(producto: Producto): ProductoOrmEntity {
     const fila = new ProductoOrmEntity();
     fila.id = producto.id;
+    fila.idVendedor = producto.idVendedor;
     fila.nombre = producto.nombre;
     fila.nombreBusqueda = producto.nombreBusqueda;
     fila.codigo = producto.codigo;

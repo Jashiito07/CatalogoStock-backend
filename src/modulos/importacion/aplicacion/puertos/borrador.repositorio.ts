@@ -34,14 +34,19 @@ export interface PendienteSinCodigo {
 export interface BorradorRepositorio {
   insertarVarios(borradores: readonly Borrador[]): Promise<void>;
 
-  buscarPorId(id: string): Promise<Borrador | null>;
+  /**
+   * El borrador **de una importación del Vendedor** (D-60: el de otro Vendedor
+   * es como si no existiera; el borrador pertenece a quien es dueño de su
+   * importación).
+   */
+  buscarPorId(id: string, idVendedor: string): Promise<Borrador | null>;
 
   /**
    * Como `buscarPorId`, pero bloquea la fila hasta el fin de la transacción en
    * curso (`SELECT . FOR UPDATE`): dos aprobaciones simultáneas del mismo
    * borrador se serializan y la segunda lo ve ya aprobado.
    */
-  bloquearPorId(id: string): Promise<Borrador | null>;
+  bloquearPorId(id: string, idVendedor: string): Promise<Borrador | null>;
 
   /** `false` si el borrador ya no existe. */
   guardar(borrador: Borrador): Promise<boolean>;

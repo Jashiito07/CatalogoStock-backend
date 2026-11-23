@@ -42,7 +42,8 @@ export class CambiarEstadoUsuarioCasoUso {
 
   async ejecutar(datos: DatosCambiarEstadoUsuario): Promise<UsuarioPublico> {
     const usuario = await this.usuarios.buscarPorId(datos.idUsuario);
-    if (usuario === null) {
+    // RF-USU-06: una cuenta eliminada no se puede reactivar; es como si no existiera.
+    if (usuario === null || usuario.estaEliminada()) {
       throw new UsuarioNoEncontradoError();
     }
     if (usuario.esVendedor()) {

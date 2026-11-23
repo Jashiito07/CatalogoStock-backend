@@ -1,4 +1,5 @@
 import { type AppPruebas, crearAppPruebas } from './preparacion/app-pruebas.js';
+import { revertirHasta } from './preparacion/migraciones.js';
 
 /**
  * e2e de la migración AgregarAccionesClienteEstadoAuditoria (D-53) contra
@@ -40,9 +41,10 @@ describe('Migración de acciones de clientes (e2e): enumerado, reversión y reap
     // la bitácora): la base de pruebas se vacía antes.
     await contexto.limpiar();
     // Primero las tres migraciones posteriores (importación del catálogo y catálogos mensuales, D-57).
-    for (let i = 0; i < 4; i++) {
-      await contexto.fuente.undoLastMigration({ transaction: 'each' });
-    }
+    await revertirHasta(
+      contexto.fuente,
+      'AgregarAccionesClienteEstadoAuditoria1794800000001',
+    );
     const sinNuevas = await acciones();
     expect(sinNuevas).not.toContain('CLIENTE_DESACTIVADO');
     expect(sinNuevas).not.toContain('CLIENTE_REACTIVADO');

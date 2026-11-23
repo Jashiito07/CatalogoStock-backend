@@ -51,16 +51,35 @@ export class BorradorRepositorioTypeorm implements BorradorRepositorio {
     await this.filas.insert(borradores.map(BorradorMapeador.aPersistencia));
   }
 
-  async buscarPorId(id: string): Promise<Borrador | null> {
-    const fila = await this.filas.findOneBy({ id });
+  /** Borradores cuya importación es del Vendedor (D-60); la subconsulta no se bloquea. */
+  private delVendedor(
+    id: string,
+    idVendedor: string,
+  ): SelectQueryBuilder<BorradorOrmEntity> {
+    return this.filas
+      .createQueryBuilder('borrador')
+      .where('borrador.id = :id', { id })
+      .andWhere(
+        `borrador.idImportacion IN (
+          SELECT importacion.id FROM importaciones_producto importacion
+          WHERE importacion.id_vendedor = :idVendedor
+        )`,
+        { idVendedor },
+      );
+  }
+
+  async buscarPorId(id: string, idVendedor: string): Promise<Borrador | null> {
+    const fila = await this.delVendedor(id, idVendedor).getOne();
     return fila ? BorradorMapeador.aDominio(fila) : null;
   }
 
-  async bloquearPorId(id: string): Promise<Borrador | null> {
-    const fila = await this.filas.findOne({
-      where: { id },
-      lock: { mode: 'pessimistic_write' },
-    });
+  async bloquearPorId(
+    id: string,
+    idVendedor: string,
+  ): Promise<Borrador | null> {
+    const fila = await this.delVendedor(id, idVendedor)
+      .setLock('pessimistic_write')
+      .getOne();
     return fila ? BorradorMapeador.aDominio(fila) : null;
   }
 

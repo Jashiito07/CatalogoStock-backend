@@ -64,6 +64,8 @@ export interface TotalesImportacion extends TotalesBorradores {
 
 export interface DatosImportacion {
   id: string;
+  /** Vendedor dueño de la importación (D-60): solo él la ve y la gestiona. */
+  idVendedor: string;
   /** Solo informativo; ya saneado (sin rutas). */
   nombreArchivo: string;
   /** SHA-256 del PDF en hexadecimal (64 caracteres): idempotencia. */
@@ -103,8 +105,16 @@ export class Importacion {
   get id(): string {
     return this.datos.id;
   }
+  get idVendedor(): string {
+    return this.datos.idVendedor;
+  }
   get nombreArchivo(): string {
     return this.datos.nombreArchivo;
+  }
+
+  /** `true` si la importación es de ese Vendedor (D-60). */
+  perteneceA(idVendedor: string): boolean {
+    return this.datos.idVendedor === idVendedor;
   }
   get huella(): string {
     return this.datos.huella;

@@ -38,7 +38,8 @@ export class ActualizarProductoCasoUso {
   async ejecutar(datos: DatosActualizarProducto): Promise<VistaProducto> {
     return this.unidadTrabajo.ejecutar(async () => {
       const actual = await this.productos.buscarPorId(datos.idProducto);
-      if (actual === null) {
+      // D-60: el de otro Vendedor responde 404, igual que uno que no existe.
+      if (actual === null || !actual.perteneceA(datos.idVendedor)) {
         throw new ProductoNoEncontradoError();
       }
       const { producto, campos, precioAnterior } = actual.aplicar(

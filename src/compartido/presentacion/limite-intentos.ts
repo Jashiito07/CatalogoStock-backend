@@ -34,6 +34,11 @@ export const GRUPOS_LIMITE_INTENTOS = {
   // límite de 3 envíos por hora y por cuenta en el caso de uso.
   SOLICITUD_CODIGO_CORREO: { limite: 3, ventanaMs: 60_000 },
   CONFIRMACION_CORREO: { limite: 5, ventanaMs: 60_000 },
+  // RF-USU-06 (contrato cuenta-y-politicas): eliminar la cuenta desde la web.
+  // La solicitud pública admite 3 por minuto por IP (más 3 envíos por hora y
+  // por cuenta en el caso de uso); confirmar con el código, 5 por minuto.
+  SOLICITUD_ELIMINACION_CUENTA: { limite: 3, ventanaMs: 60_000 },
+  ELIMINACION_CUENTA: { limite: 5, ventanaMs: 60_000 },
   // RF-PRO-01 (contrato de productos, imágenes): 30 subidas por minuto. Se
   // cuenta por IP, como los demás grupos (el guard corre antes de la sesión).
   SUBIDA_IMAGENES: { limite: 30, ventanaMs: 60_000 },

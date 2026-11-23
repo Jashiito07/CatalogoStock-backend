@@ -234,16 +234,16 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
     it('obtener devuelve la importación con sus totales; 404 si no existe', async () => {
       const { importacion } = await importar();
 
-      const vista = await obtener.ejecutar(importacion.id);
+      const vista = await obtener.ejecutar(importacion.id, ID_VENDEDOR);
       expect(vista.totales.pendientes).toBe(3);
       await expect(
-        obtener.ejecutar('00000000-0000-4000-8000-000000000999'),
+        obtener.ejecutar('00000000-0000-4000-8000-000000000999', ID_VENDEDOR),
       ).rejects.toMatchObject({ categoria: 'NO_ENCONTRADO' });
     });
 
     it('listar: PENDIENTE por defecto, filtros de advertencias, texto sin tildes y página del PDF; 404 si la importación no existe', async () => {
       const { importacion } = await importar();
-      const base = { idImportacion: importacion.id, paginacion: crearPaginacion() };
+      const base = { idVendedor: ID_VENDEDOR, idImportacion: importacion.id, paginacion: crearPaginacion() };
 
       expect((await listar.ejecutar(base)).total).toBe(3);
       expect((await listar.ejecutar({ ...base, conAdvertencias: true })).total).toBe(2);
@@ -266,16 +266,17 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
       const id = porCodigo('43873')!.id;
 
       await expect(
-        editar.ejecutar({ idBorrador: id, cambios: { precio: '12.505' } }),
+        editar.ejecutar({ idVendedor: ID_VENDEDOR, idBorrador: id, cambios: { precio: '12.505' } }),
       ).rejects.toMatchObject({ codigo: 'DATOS_INVALIDOS' });
       await expect(
-        editar.ejecutar({ idBorrador: id, cambios: { marcaId: ID_MARCA_INACTIVA } }),
+        editar.ejecutar({ idVendedor: ID_VENDEDOR, idBorrador: id, cambios: { marcaId: ID_MARCA_INACTIVA } }),
       ).rejects.toMatchObject({ codigo: 'MARCA_INACTIVA' });
       await expect(
-        editar.ejecutar({ idBorrador: id, cambios: { marcaId: ID_MARCA_INEXISTENTE } }),
+        editar.ejecutar({ idVendedor: ID_VENDEDOR, idBorrador: id, cambios: { marcaId: ID_MARCA_INEXISTENTE } }),
       ).rejects.toMatchObject({ codigo: 'MARCA_NO_ENCONTRADA' });
       await expect(
         editar.ejecutar({
+          idVendedor: ID_VENDEDOR,
           idBorrador: '00000000-0000-4000-8000-000000000999',
           cambios: { precio: '1' },
         }),
@@ -289,6 +290,7 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
       expect(sinPrecio.advertencias).toEqual(['SIN_PRECIO']);
 
       const publico = await editar.ejecutar({
+        idVendedor: ID_VENDEDOR,
         idBorrador: sinPrecio.id,
         cambios: { precio: '9.9', nombre: 'Esmalte Rosa Pastel' },
       });
@@ -297,7 +299,7 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
 
       await aprobar.ejecutar({ idVendedor: ID_VENDEDOR, ids: [sinPrecio.id] });
       await expect(
-        editar.ejecutar({ idBorrador: sinPrecio.id, cambios: { precio: '1' } }),
+        editar.ejecutar({ idVendedor: ID_VENDEDOR, idBorrador: sinPrecio.id, cambios: { precio: '1' } }),
       ).rejects.toMatchObject({ codigo: 'BORRADOR_NO_EDITABLE', categoria: 'REGLA_NEGOCIO' });
     });
   });
@@ -375,7 +377,7 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
       await importar();
       const buenos = [porCodigo('43873')!, porCodigo(null)!];
       const malo = borradores.borradores.find((b) => b.codigo === '5054')!;
-      await editar.ejecutar({ idBorrador: malo.id, cambios: { precio: '3' } });
+      await editar.ejecutar({ idVendedor: ID_VENDEDOR, idBorrador: malo.id, cambios: { precio: '3' } });
       productos.fallos.set(
         'Esmalte Color Rosa',
         new (class extends ReglaNegocioError {})('MARCA_INACTIVA', 'La marca está desactivada.'),
@@ -435,7 +437,7 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
       ]);
       expect(productos.creados).toHaveLength(0);
       await expect(
-        editar.ejecutar({ idBorrador: uno, cambios: { precio: '1' } }),
+        editar.ejecutar({ idVendedor: ID_VENDEDOR, idBorrador: uno, cambios: { precio: '1' } }),
       ).rejects.toMatchObject({ codigo: 'BORRADOR_NO_EDITABLE' });
     });
   });

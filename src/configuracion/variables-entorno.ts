@@ -6,6 +6,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   Max,
   Min,
   MinLength,
@@ -24,6 +25,9 @@ export const VIDA_RENOVACION_DIAS = 7;
 
 /** Carpeta de archivos por defecto (D-46), fuera de Git. */
 export const RUTA_ALMACENAMIENTO_POR_DEFECTO = './almacenamiento';
+
+/** Dirección pública de la API en desarrollo (RF-USU-07). */
+export const URL_PUBLICA_POR_DEFECTO = 'http://localhost:3000';
 
 /** Longitud mínima de JWT_SECRETO (contrato de usuarios). */
 export const LONGITUD_MINIMA_JWT_SECRETO = 32;
@@ -165,6 +169,19 @@ export class VariablesEntorno {
   RETENCION_IMPORTACIONES_ACTIVA: boolean = true;
 
   /**
+   * Dirección pública de la API (RF-USU-07): con ella se arman las URL de las
+   * políticas (`GET /api/v1/politicas`). Sin barra final. En producción es
+   * obligatoria y debe empezar con `https://`; en desarrollo vale
+   * `http://localhost:3000` si no se define.
+   */
+  @IsOptional()
+  @IsString()
+  @Matches(/^https?:\/\/[^\s/?#]+(\/[^\s?#]*)?$/, {
+    message: 'URL_PUBLICA debe ser una dirección http(s) sin espacios',
+  })
+  URL_PUBLICA: string = URL_PUBLICA_POR_DEFECTO;
+
+  /**
    * Interruptor del envío de correo (verificación del correo y recuperación de
    * clave, D-50). Obligatorio: `true` envía por SMTP; `false` no envía nada
    * (solo deja en el log que se omitió el envío, sin destinatario ni código) y
@@ -224,10 +241,22 @@ export function validarVariablesEntorno(
 ): VariablesEntorno {
   const variables = plainToInstance(VariablesEntorno, configuracion);
   const errores = validateSync(variables, { skipMissingProperties: false });
-  if (errores.length > 0) {
-    const nombres = errores.map((error) => error.property).join(', ');
+  const nombres = errores.map((error) => error.property);
+  // RF-USU-07: en producción URL_PUBLICA es obligatoria y con https://.
+  if (
+    configuracion.NODE_ENV === 'production' &&
+    !(
+      typeof configuracion.URL_PUBLICA === 'string' &&
+      configuracion.URL_PUBLICA.startsWith('https://')
+    ) &&
+    !nombres.includes('URL_PUBLICA')
+  ) {
+    nombres.push('URL_PUBLICA');
+  }
+  if (nombres.length > 0) {
+    const nombresTexto = nombres.join(', ');
     throw new Error(
-      `Configuración inválida: revise las variables de entorno ${nombres} (ver .env.example).`,
+      `Configuración inválida: revise las variables de entorno ${nombresTexto} (ver .env.example).`,
     );
   }
   return variables;

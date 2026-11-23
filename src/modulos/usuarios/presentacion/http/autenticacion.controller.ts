@@ -17,9 +17,12 @@ import type { Canal } from '../../dominio/canal.js';
 import type { ActorAutenticado } from '../../dominio/propiedad.js';
 import { IngresoDto, TokenRenovacionDto } from './dto/autenticacion.dto.js';
 import {
+  ConfirmacionEliminacionDto,
   RecuperacionClaveDto,
   SolicitudRecuperacionCorreoDto,
 } from './dto/clave.dto.js';
+import { EliminarCuentaPorCodigoCasoUso } from '../../aplicacion/casos-uso/eliminar-cuenta-por-codigo.caso-uso.js';
+import { SolicitarEliminacionCuentaCasoUso } from '../../aplicacion/casos-uso/solicitar-eliminacion-cuenta.caso-uso.js';
 import { aRespuestaSesion, type RespuestaSesion } from './respuestas.js';
 import { UsuarioActual } from './usuario-actual.js';
 
@@ -40,6 +43,10 @@ export class AutenticacionController {
     private readonly recuperarClave: RecuperarClaveCasoUso,
     @Inject(SolicitarRecuperacionPorCorreoCasoUso)
     private readonly solicitarRecuperacion: SolicitarRecuperacionPorCorreoCasoUso,
+    @Inject(SolicitarEliminacionCuentaCasoUso)
+    private readonly solicitarEliminacionCuenta: SolicitarEliminacionCuentaCasoUso,
+    @Inject(EliminarCuentaPorCodigoCasoUso)
+    private readonly eliminarCuentaPorCodigo: EliminarCuentaPorCodigoCasoUso,
   ) {}
 
   /** POST /api/v1/autenticacion/ingreso/cliente — público; app móvil, solo Clientes (D-19). */
@@ -103,6 +110,40 @@ export class AutenticacionController {
   ): Promise<void> {
     // El envío sigue en segundo plano: la respuesta tarda igual exista o no la cuenta.
     await this.solicitarRecuperacion.ejecutar(cuerpo.correo);
+  }
+
+  /**
+   * POST /api/v1/autenticacion/eliminacion/solicitud — público (RF-USU-06,
+   * PA-21). **Siempre 204**: el código de eliminación solo se envía al correo
+   * registrado de un Cliente activo con el correo verificado. 3 por minuto por
+   * IP y 3 envíos por hora por cuenta.
+   */
+  @Post('eliminacion/solicitud')
+  @Publico()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @LimiteIntentos('SOLICITUD_ELIMINACION_CUENTA')
+  async solicitarEliminacion(
+    @Body() cuerpo: SolicitudRecuperacionCorreoDto,
+  ): Promise<void> {
+    await this.solicitarEliminacionCuenta.ejecutar(cuerpo.correo);
+  }
+
+  /**
+   * POST /api/v1/autenticacion/eliminacion — público (RF-USU-06). Elimina la
+   * cuenta con el código del correo → 204; ante cualquier fallo, 422
+   * `CODIGO_INVALIDO`. 5 por minuto por IP.
+   */
+  @Post('eliminacion')
+  @Publico()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @LimiteIntentos('ELIMINACION_CUENTA')
+  async eliminarCuenta(
+    @Body() cuerpo: ConfirmacionEliminacionDto,
+  ): Promise<void> {
+    await this.eliminarCuentaPorCodigo.ejecutar({
+      correo: cuerpo.correo,
+      codigo: cuerpo.codigo,
+    });
   }
 
   /**

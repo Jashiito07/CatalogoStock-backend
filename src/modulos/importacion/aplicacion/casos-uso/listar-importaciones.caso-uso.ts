@@ -9,6 +9,8 @@ import type { ImportacionRepositorio } from '../puertos/importacion.repositorio.
 import type { VistaImportacion } from '../vista-importacion.js';
 
 export interface ConsultaImportaciones {
+  /** Vendedor del token: solo ve sus importaciones (D-60). */
+  idVendedor: string;
   estado?: EstadoImportacion;
   marcaId?: string;
   paginacion: Paginacion;
@@ -30,7 +32,11 @@ export class ListarImportacionesCasoUso {
     consulta: ConsultaImportaciones,
   ): Promise<Pagina<VistaImportacion>> {
     const pagina = await this.importaciones.listar(
-      { estado: consulta.estado, marcaId: consulta.marcaId },
+      {
+        idVendedor: consulta.idVendedor,
+        estado: consulta.estado,
+        marcaId: consulta.marcaId,
+      },
       consulta.paginacion,
     );
     const ids = [...new Set(pagina.elementos.map((i) => i.marcaId))];

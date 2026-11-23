@@ -1,6 +1,7 @@
 import type { Paginacion } from '../../../../compartido/dominio/paginacion.js';
 import type { BusquedaClientes } from '../../dominio/busqueda-clientes.js';
 import type { Correo } from '../../dominio/correo.js';
+import type { DatosAnonimos } from '../../dominio/cuenta-eliminada.js';
 import type { Rol } from '../../dominio/rol.js';
 import type { Usuario } from '../../dominio/usuario.js';
 
@@ -53,7 +54,23 @@ export interface UsuarioRepositorio {
     ahora: Date,
   ): Promise<boolean>;
   /**
-   * Solo usuarios con rol `CLIENTE`, del más reciente al más antiguo, con la
+   * Elimina la cuenta de un **Cliente** (RF-USU-06, PA-21): reemplaza el
+   * nombre, el correo y el teléfono por los datos anonimizados y el hash de la
+   * clave por `hashClave` (aleatorio), marca `activo = false` y guarda
+   * `eliminado_en = ahora`, de forma atómica
+   * (`UPDATE . WHERE rol = 'CLIENTE' AND eliminado_en IS NULL`), dentro de la
+   * transacción en curso si la hay. Devuelve `false` si la cuenta no existe,
+   * es del Vendedor o ya estaba eliminada: así dos solicitudes simultáneas
+   * eliminan y registran una sola vez. La fila se conserva.
+   */
+  anonimizarCuenta(
+    idUsuario: string,
+    datos: DatosAnonimos,
+    hashClave: string,
+    ahora: Date,
+  ): Promise<boolean>;
+  /**
+   * Solo usuarios con rol `CLIENTE` **no eliminados**, del más reciente al más antiguo, con la
    * búsqueda sin mayúsculas ni tildes en nombre, correo y teléfono y, si se
    * indica `activo`, solo los de ese estado (D-53) y, si se indica
    * `correoVerificado`, solo los verificados (`true`) o sin verificar

@@ -131,6 +131,7 @@ describe('D-57: emparejado por nombre y filtro accion (casos de uso)', () => {
   const publicos = async (idImportacion: string, extra: Record<string, unknown> = {}) =>
     (
       await listar.ejecutar({
+        idVendedor: ID_VENDEDOR,
         idImportacion,
         paginacion: crearPaginacion(1, 100),
         ...extra,
@@ -273,9 +274,10 @@ describe('D-57: emparejado por nombre y filtro accion (casos de uso)', () => {
       const mes = await importar([['Toalla Facial Suavecita', null, '3.00']]);
       const id = borradorDe(mes.importacion.id, 'Toalla Facial Suavecita').id;
 
-      const antes = await editar.ejecutar({ idBorrador: id, cambios: { precio: '3.25' } });
+      const antes = await editar.ejecutar({ idVendedor: ID_VENDEDOR, idBorrador: id, cambios: { precio: '3.25' } });
       expect(antes.productoExistente).toBeNull();
       const despues = await editar.ejecutar({
+        idVendedor: ID_VENDEDOR,
         idBorrador: id,
         cambios: { nombre: 'toalla facial, suave' },
       });
@@ -392,7 +394,7 @@ describe('D-57: emparejado por nombre y filtro accion (casos de uso)', () => {
         ['Labial Mate Rojo', null, '6.00'],
         ['Esmalte Color Rosa', null, '8.00'],
       ]);
-      const base = { idImportacion: mes2.importacion.id, accion: 'NUEVO' as AccionRevision };
+      const base = { idVendedor: ID_VENDEDOR, idImportacion: mes2.importacion.id, accion: 'NUEVO' as AccionRevision };
 
       const primera = await listar.ejecutar({ ...base, paginacion: crearPaginacion(1, 2) });
       const segunda = await listar.ejecutar({ ...base, paginacion: crearPaginacion(2, 2) });

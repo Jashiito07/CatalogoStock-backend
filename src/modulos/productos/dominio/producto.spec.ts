@@ -9,12 +9,14 @@ const AHORA = new Date('2026-11-11T15:00:00.000Z');
 const DESPUES = new Date('2026-11-11T16:00:00.000Z');
 const ID = '00000000-0000-4000-8000-000000000001';
 const MARCA = '00000000-0000-4000-8000-0000000000b1';
+const VENDEDOR = '00000000-0000-4000-8000-0000000000aa';
 
 function crear(
   parcial: Partial<Parameters<typeof Producto.crear>[0]> = {},
 ): Producto {
   return Producto.crear({
     id: ID,
+    idVendedor: VENDEDOR,
     nombre: 'Crema hidratante Ésika 50 g',
     marcaId: MARCA,
     precio: '12.50',
@@ -65,6 +67,7 @@ describe('RF-PRO-01 / RF-PRO-05: Producto', () => {
     const producto = crear({ nombre: '  Crema   hidratante ' });
     expect(producto.aPublico()).toEqual({
       id: ID,
+      idVendedor: VENDEDOR,
       nombre: 'Crema hidratante',
       codigo: null,
       marcaId: MARCA,

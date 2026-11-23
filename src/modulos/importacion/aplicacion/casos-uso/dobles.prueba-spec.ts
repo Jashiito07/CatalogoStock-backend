@@ -111,7 +111,13 @@ export class ImportacionRepositorioEnMemoria implements ImportacionRepositorio {
   ocultarEnLaPrimeraBusqueda = false;
 
   insertar(importacion: Importacion): Promise<void> {
-    if (this.importaciones.some((i) => i.huella === importacion.huella)) {
+    if (
+      this.importaciones.some(
+        (i) =>
+          i.huella === importacion.huella &&
+          i.idVendedor === importacion.idVendedor,
+      )
+    ) {
       return Promise.reject(new HuellaDuplicadaError());
     }
     this.importaciones.push(importacion);
@@ -126,21 +132,34 @@ export class ImportacionRepositorioEnMemoria implements ImportacionRepositorio {
     return this.buscarPorId(id);
   }
 
-  buscarPorHuella(huella: string): Promise<Importacion | null> {
+  buscarPorHuella(
+    idVendedor: string,
+    huella: string,
+  ): Promise<Importacion | null> {
     if (this.ocultarEnLaPrimeraBusqueda) {
       // La subida rival aún no se había guardado cuando se hizo la primera búsqueda.
       this.ocultarEnLaPrimeraBusqueda = false;
       return Promise.resolve(null);
     }
     return Promise.resolve(
-      this.importaciones.find((i) => i.huella === huella) ?? null,
+      this.importaciones.find(
+        (i) => i.huella === huella && i.idVendedor === idVendedor,
+      ) ?? null,
     );
   }
 
-  archivarVigentesDeMarca(marcaId: string, ahora: Date): Promise<number> {
+  archivarVigentesDeMarca(
+    idVendedor: string,
+    marcaId: string,
+    ahora: Date,
+  ): Promise<number> {
     let archivadas = 0;
     this.importaciones = this.importaciones.map((i) => {
-      if (i.marcaId === marcaId && i.estado === 'VIGENTE') {
+      if (
+        i.idVendedor === idVendedor &&
+        i.marcaId === marcaId &&
+        i.estado === 'VIGENTE'
+      ) {
         archivadas++;
         return i.archivar(ahora);
       }
@@ -154,6 +173,7 @@ export class ImportacionRepositorioEnMemoria implements ImportacionRepositorio {
     paginacion: Paginacion,
   ): Promise<Pagina<Importacion>> {
     const coincidencias = this.importaciones
+      .filter((i) => i.idVendedor === filtro.idVendedor)
       .filter((i) => filtro.estado === undefined || i.estado === filtro.estado)
       .filter((i) => filtro.marcaId === undefined || i.marcaId === filtro.marcaId)
       .toSorted(
@@ -182,18 +202,27 @@ export class ImportacionRepositorioEnMemoria implements ImportacionRepositorio {
 
 export class BorradorRepositorioEnMemoria implements BorradorRepositorio {
   borradores: Borrador[] = [];
+  /** Dueño de cada importación (D-60); las que no están aquí son de `ID_VENDEDOR`. */
+  private readonly propietarios = new Map<string, string>();
+
+  /** Dice de qué Vendedor es la importación (para probar la propiedad de los borradores). */
+  asignarPropietario(idImportacion: string, idVendedor: string): void {
+    this.propietarios.set(idImportacion, idVendedor);
+  }
 
   insertarVarios(nuevos: readonly Borrador[]): Promise<void> {
     this.borradores.push(...nuevos);
     return Promise.resolve();
   }
 
-  buscarPorId(id: string): Promise<Borrador | null> {
-    return Promise.resolve(this.borradores.find((b) => b.id === id) ?? null);
+  buscarPorId(id: string, idVendedor: string): Promise<Borrador | null> {
+    const borrador = this.borradores.find((b) => b.id === id);
+    const dueno = borrador && (this.propietarios.get(borrador.idImportacion) ?? ID_VENDEDOR);
+    return Promise.resolve(dueno === idVendedor ? (borrador ?? null) : null);
   }
 
-  bloquearPorId(id: string): Promise<Borrador | null> {
-    return this.buscarPorId(id);
+  bloquearPorId(id: string, idVendedor: string): Promise<Borrador | null> {
+    return this.buscarPorId(id, idVendedor);
   }
 
   guardar(borrador: Borrador): Promise<boolean> {
@@ -335,6 +364,7 @@ export class CalculadorHuellaFalso implements CalculadorHuella {
 /** Un producto del catálogo falso, con su marca y su eliminación lógica. */
 export interface ProductoFalso {
   id: string;
+  idVendedor: string;
   nombre: string;
   /** `null`: producto sin código (se empareja por nombre, D-57). */
   codigo: string | null;
@@ -360,6 +390,7 @@ export class ProductosExistentesFalso implements ProductosExistentes {
     datos: Partial<ProductoFalso> & { codigo: string | null; marcaId?: string },
   ): ProductoFalso {
     const producto: ProductoFalso = {
+      idVendedor: datos.idVendedor ?? ID_VENDEDOR,
       id: datos.id ?? `00000000-0000-4000-8000-${String(700 + this.productos.length).padStart(12, '0')}`,
       nombre: datos.nombre ?? 'Producto existente',
       codigo: datos.codigo,
@@ -372,62 +403,78 @@ export class ProductosExistentesFalso implements ProductosExistentes {
     return producto;
   }
 
-  private vivos(marcaId: string): ProductoFalso[] {
-    return this.productos.filter((p) => p.marcaId === marcaId && !p.eliminado);
+  private vivos(idVendedor: string, marcaId: string): ProductoFalso[] {
+    return this.productos.filter(
+      (p) =>
+        p.idVendedor === idVendedor && p.marcaId === marcaId && !p.eliminado,
+    );
   }
 
-  private conCodigo(marcaId: string): Array<ProductoFalso & { codigo: string }> {
-    return this.vivos(marcaId).filter(
+  private conCodigo(
+    idVendedor: string,
+    marcaId: string,
+  ): Array<ProductoFalso & { codigo: string }> {
+    return this.vivos(idVendedor, marcaId).filter(
       (p): p is ProductoFalso & { codigo: string } => p.codigo !== null,
     );
   }
 
   buscarPorCodigos(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<ProductoConCodigo[]> {
     return Promise.resolve(
-      this.conCodigo(marcaId).filter((p) => codigos.includes(p.codigo)),
+      this.conCodigo(idVendedor, marcaId).filter((p) =>
+        codigos.includes(p.codigo),
+      ),
     );
   }
 
   async codigosExistentes(
+    idVendedor: string,
     marcaId: string,
     codigos: readonly string[],
   ): Promise<Set<string>> {
     return new Set(
-      (await this.buscarPorCodigos(marcaId, codigos)).map((p) => p.codigo),
+      (await this.buscarPorCodigos(idVendedor, marcaId, codigos)).map(
+        (p) => p.codigo,
+      ),
     );
   }
 
   bloquearPorCodigo(
+    idVendedor: string,
     marcaId: string,
     codigo: string,
   ): Promise<ProductoConCodigo | null> {
     this.bloqueos++;
     return Promise.resolve(
-      this.conCodigo(marcaId).find((p) => p.codigo === codigo) ?? null,
+      this.conCodigo(idVendedor, marcaId).find((p) => p.codigo === codigo) ??
+        null,
     );
   }
 
   buscarSinCodigoPorNombres(
+    idVendedor: string,
     marcaId: string,
     nombres: readonly string[],
   ): Promise<ProductoSinCodigo[]> {
     const claves = nombres.map(claveDeEmparejamiento);
     return Promise.resolve(
-      this.vivos(marcaId).filter(
+      this.vivos(idVendedor, marcaId).filter(
         (p) => p.codigo === null && claves.includes(claveDeEmparejamiento(p.nombre)),
       ),
     );
   }
 
   bloquearSinCodigoPorNombre(
+    idVendedor: string,
     marcaId: string,
     nombre: string,
   ): Promise<ProductoSinCodigo[]> {
     this.bloqueos++;
-    return this.buscarSinCodigoPorNombres(marcaId, [nombre]);
+    return this.buscarSinCodigoPorNombres(idVendedor, marcaId, [nombre]);
   }
 
   actualizarPrecio(datos: {
@@ -444,11 +491,12 @@ export class ProductosExistentesFalso implements ProductosExistentes {
     return Promise.resolve();
   }
   listarAusentes(
+    idVendedor: string,
     marcaId: string,
     codigosPresentes: readonly string[],
     paginacion: Paginacion,
   ): Promise<Pagina<ProductoAusente>> {
-    const ausentes = this.conCodigo(marcaId)
+    const ausentes = this.conCodigo(idVendedor, marcaId)
       .filter((p) => !codigosPresentes.includes(p.codigo))
       .toSorted((a, b) => a.nombre.localeCompare(b.nombre) || a.id.localeCompare(b.id));
     const inicio = desplazamiento(paginacion);
@@ -493,6 +541,7 @@ export class CreadorProductosFalso implements CreadorProductos {
     if (this.catalogo !== undefined) {
       this.catalogo.agregar({
         id,
+        idVendedor: datos.idVendedor,
         nombre: datos.nombre,
         codigo: datos.codigo,
         marcaId: datos.marcaId,

@@ -26,6 +26,8 @@ const VARIABLES_BD = [
 const VALORES_FIJOS: Readonly<Record<string, string>> = {
   PUERTO: '3999',
   CORS_ORIGENES: 'http://localhost:4200',
+  // RF-USU-07: las pruebas comprueban las URL de las políticas con este valor.
+  URL_PUBLICA: 'https://catalogostock.ejemplo.test',
   // Costo mínimo permitido: las pruebas hacen muchos hash.
   BCRYPT_COSTO: '10',
   JWT_SECRETO: 'secreto_falso_solo_para_pruebas_e2e_0123456789',

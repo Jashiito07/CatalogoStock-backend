@@ -26,7 +26,12 @@ import { ListarClientesCasoUso } from '../../aplicacion/casos-uso/listar-cliente
 import { RegistrarClienteCasoUso } from '../../aplicacion/casos-uso/registrar-cliente.caso-uso.js';
 import { SolicitarVerificacionCorreoCasoUso } from '../../aplicacion/casos-uso/solicitar-verificacion-correo.caso-uso.js';
 import type { ActorAutenticado } from '../../dominio/propiedad.js';
-import { CambioClaveDto, ConfirmacionCorreoDto } from './dto/clave.dto.js';
+import {
+  CambioClaveDto,
+  ConfirmacionCorreoDto,
+  EliminacionCuentaDto,
+} from './dto/clave.dto.js';
+import { EliminarCuentaCasoUso } from '../../aplicacion/casos-uso/eliminar-cuenta.caso-uso.js';
 import { ConsultaClientesDto } from './dto/consulta-clientes.dto.js';
 import { EstadoUsuarioDto } from './dto/estado-usuario.dto.js';
 import { RegistroClienteDto } from './dto/registro-cliente.dto.js';
@@ -75,6 +80,8 @@ export class UsuariosController {
     private readonly confirmarVerificacion: ConfirmarCorreoCasoUso,
     @Inject(CambiarEstadoUsuarioCasoUso)
     private readonly cambiarEstadoUsuario: CambiarEstadoUsuarioCasoUso,
+    @Inject(EliminarCuentaCasoUso)
+    private readonly eliminarCuenta: EliminarCuentaCasoUso,
   ) {}
 
   /**
@@ -150,6 +157,25 @@ export class UsuariosController {
       claveActual: cuerpo.claveActual,
       claveNueva: cuerpo.claveNueva,
       tokenRenovacionActual: cuerpo.tokenRenovacionActual,
+    });
+  }
+
+  /**
+   * POST /api/v1/usuarios/yo/eliminacion — solo el Cliente (RF-USU-06, PA-21).
+   * Propiedad: solo la cuenta del token, confirmada con su clave. 204; 422 con
+   * la clave incorrecta; 429 al pasar de 3 intentos por hora y cuenta. El
+   * Vendedor recibe 403.
+   */
+  @Post('yo/eliminacion')
+  @Roles('CLIENTE')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async eliminarMiCuenta(
+    @UsuarioActual() actor: ActorAutenticado,
+    @Body() cuerpo: EliminacionCuentaDto,
+  ): Promise<void> {
+    await this.eliminarCuenta.ejecutar({
+      idUsuario: actor.id,
+      clave: cuerpo.clave,
     });
   }
 

@@ -71,7 +71,11 @@ export class CrearImportacionCasoUso {
 
     validarArchivoPdf(datos.contenido);
     const huella = this.huellas.calcular(datos.contenido);
-    const existente = await this.importaciones.buscarPorHuella(huella);
+    // D-60: solo cuenta el PDF que subió este mismo Vendedor; nunca revela el de otro.
+    const existente = await this.importaciones.buscarPorHuella(
+      datos.idVendedor,
+      huella,
+    );
     if (existente !== null) {
       throw new ImportacionDuplicadaError(existente.id);
     }
@@ -87,6 +91,8 @@ export class CrearImportacionCasoUso {
     const ahora = this.reloj.ahora();
     const importacion = Importacion.crear({
       id: this.generadorId.generar(),
+      // D-60: el dueño es el Vendedor autenticado, nunca un dato del cliente.
+      idVendedor: datos.idVendedor,
       nombreArchivo: sanearNombreArchivo(datos.nombreArchivo),
       huella,
       marcaId: marca.id,
@@ -105,8 +111,13 @@ export class CrearImportacionCasoUso {
 
     try {
       await this.unidadTrabajo.ejecutar(async () => {
-        // D-57: el catálogo nuevo de la marca archiva el anterior de esa marca.
-        await this.importaciones.archivarVigentesDeMarca(marca.id, ahora);
+        // D-57, D-60: el catálogo nuevo de la marca archiva el anterior del
+        // mismo Vendedor y marca (nunca el de otro Vendedor).
+        await this.importaciones.archivarVigentesDeMarca(
+          datos.idVendedor,
+          marca.id,
+          ahora,
+        );
         await this.importaciones.insertar(importacion);
         for (let i = 0; i < borradores.length; i += LOTE_INSERCION) {
           await this.borradores.insertarVarios(
@@ -128,7 +139,10 @@ export class CrearImportacionCasoUso {
     } catch (error) {
       if (error instanceof HuellaDuplicadaError) {
         // Dos subidas simultáneas del mismo PDF: gana la primera.
-        const ganadora = await this.importaciones.buscarPorHuella(huella);
+        const ganadora = await this.importaciones.buscarPorHuella(
+          datos.idVendedor,
+          huella,
+        );
         if (ganadora !== null) {
           throw new ImportacionDuplicadaError(ganadora.id);
         }
