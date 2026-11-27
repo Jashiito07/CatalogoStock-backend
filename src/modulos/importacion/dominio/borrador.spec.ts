@@ -239,3 +239,48 @@ describe('RF-PRO-01: borrador', () => {
     expect(borrador.descartar(AHORA).estado).toBe('DESCARTADO');
   });
 });
+
+describe('PRECIO_HEREDADO: el precio de la ficha exige confirmación del Vendedor', () => {
+  it('requiere revisión (no es informativa) y se conserva al editar otros campos', () => {
+    const borrador = crear({ advertencias: ['PRECIO_HEREDADO'] });
+
+    expect(borrador.precioHeredado).toBe(true);
+    expect(borrador.advertencias).toEqual(['PRECIO_HEREDADO', 'PRECIO_EN_OFERTA']);
+    expect(requiereRevision(borrador.advertencias)).toBe(true);
+
+    const { borrador: editado } = borrador.editar({ descripcion: 'Tono natural' }, AHORA);
+    expect(editado.precioHeredado).toBe(true);
+    const { borrador: renombrado } = borrador.editar({ nombre: 'Base Mate – Tono 1' }, AHORA);
+    expect(renombrado.precioHeredado).toBe(true);
+  });
+
+  it('enviar el precio, aunque sea el mismo, lo confirma y quita la advertencia', () => {
+    const borrador = crear({ advertencias: ['PRECIO_HEREDADO'] });
+
+    const { borrador: mismo, campos } = borrador.editar({ precio: '35.00' }, AHORA);
+    expect(campos).toEqual(['precio']);
+    expect(mismo.precioHeredado).toBe(false);
+    expect(mismo.advertencias).toEqual(['PRECIO_EN_OFERTA']);
+
+    const { borrador: distinto } = borrador.editar({ precio: '30.00' }, AHORA);
+    expect(distinto.precioHeredado).toBe(false);
+    expect(distinto.precio?.aTexto()).toBe('30.00');
+  });
+
+  it('sin la advertencia, enviar el mismo precio no cambia nada', () => {
+    const { campos } = crear().editar({ precio: '35.00' }, AHORA);
+    expect(campos).toEqual([]);
+  });
+
+  it('PRECIO_HEREDADO sigue el orden del contrato (después de SIN_PRECIO)', () => {
+    expect(
+      calcularAdvertencias({
+        codigo: null,
+        nombre: 'Base',
+        precio: Dinero.desdeTexto('10.00'),
+        precioNormal: null,
+        persistentes: ['PRECIO_HEREDADO'],
+      }),
+    ).toEqual(['PRECIO_HEREDADO', 'SIN_CODIGO']);
+  });
+});

@@ -6,6 +6,7 @@ import { Dinero } from '../../../compartido/dominio/dinero.js';
  */
 export const ADVERTENCIAS_BORRADOR = [
   'SIN_PRECIO',
+  'PRECIO_HEREDADO',
   'SIN_CODIGO',
   'NOMBRE_DUDOSO',
   'PRECIO_EN_OFERTA',
@@ -44,6 +45,7 @@ export const ADVERTENCIAS_INFORMATIVAS: readonly AdvertenciaBorrador[] = [
  * borrador según si el producto existe en ese momento (D-57).
  */
 export const ADVERTENCIAS_PERSISTENTES: readonly AdvertenciaBorrador[] = [
+  'PRECIO_HEREDADO',
   'CODIGO_REPETIDO',
   'VARIAS_REFERENCIAS',
   'NOMBRE_DUDOSO',

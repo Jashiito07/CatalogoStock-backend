@@ -3,6 +3,10 @@ import {
   type BorradorExtraido,
 } from './borrador-extraido.js';
 import {
+  LONGITUD_MAXIMA_NOMBRE_CONFIABLE,
+  PREFIJO_NOMBRE_NO_LEIDO,
+} from './advertencias.js';
+import {
   LONGITUD_MAXIMA_DESCRIPCION_LECTOR as LONGITUD_MAXIMA_DESCRIPCION,
   nombreDeBorrador,
   partirNombreLargo,
@@ -47,7 +51,9 @@ const PATRON_SOLO_NUMEROS = /^[\d\s.,/+-]*$/;
 const PATRON_ETIQUETA_FICHA = /^[A-Z]?\d{1,2}[A-Z]?$/;
 const PATRON_PORCENTAJE = /^\d{1,3}\s*%/;
 const PATRON_ESPECIFICACION =
-  /^(Cont\.|Largo\b|Ancho\b|Alto\b|Medida\b|Con pasador|Tama[ñn]o\b|Peso\b)/i;
+  /^(Cont\.|Largo\b|Ancho\b|Alto\b|Medidas?\b|Di[áa]metro\b|Dimensiones\b|Con pasador|Tama[ñn]o\b|Peso\b)/i;
+/** «Hidratante Cont. 30 g»: el contenido pegado al nombre en la misma línea pasa a la descripción. */
+const CONTENIDO_EN_LINEA = /\s+(?=Cont\.\s*\d)/i;
 
 /** Etiquetas sueltas del catálogo que acompañan al producto pero no son su nombre. */
 const ETIQUETAS =
@@ -165,6 +171,27 @@ function siguienteArriba(
       continue;
     }
     if (mejor === null || linea.y1 > mejor.y1) {
+      mejor = linea;
+    }
+  }
+  return mejor;
+}
+
+/** La línea más cercana por debajo de `desde` (misma columna que `columna`). */
+function siguienteAbajo(
+  lineas: readonly Linea[],
+  desde: Linea,
+  columna: Linea,
+): Linea | null {
+  let mejor: Linea | null = null;
+  for (const linea of lineas) {
+    if (linea === desde || linea.y1 <= desde.y1 + 0.5) {
+      continue;
+    }
+    if (!mismaColumna(linea, columna)) {
+      continue;
+    }
+    if (mejor === null || linea.y1 < mejor.y1) {
       mejor = linea;
     }
   }
@@ -350,10 +377,18 @@ function aNombreYDescripcion(pila: Pila): NombreYDescripcion {
       : pila.lineas.slice(0, indiceEspecificacion);
   const lineasDescripcion =
     indiceEspecificacion < 0 ? [] : pila.lineas.slice(indiceEspecificacion);
+  const [textoNombreBruto, ...contenidoEnLinea] = lineasNombre
+    .map((l) => l.texto)
+    .join(' ')
+    .split(CONTENIDO_EN_LINEA);
   const { nombre, resto, recortado } = partirNombreLargo(
-    limpiarNombre(lineasNombre.map((l) => l.texto).join(' ')),
+    limpiarNombre(textoNombreBruto),
   );
-  const descripcion = [resto, ...lineasDescripcion.map((l) => l.texto)]
+  const descripcion = [
+    resto,
+    ...contenidoEnLinea,
+    ...lineasDescripcion.map((l) => l.texto),
+  ]
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -394,6 +429,254 @@ interface Candidato {
   codigo: string | null;
   precio: Precio | null;
   pila: Pila;
+  /** El precio no es del propio código: viene del bloque de precio de la ficha (`PRECIO_HEREDADO`). */
+  heredado?: boolean;
+  /** Título real de la ficha de la que se heredó el precio, para componer el nombre de la variante. */
+  tituloFicha?: string | null;
+}
+
+/** Texto de un artículo promocional (bolsa, caja, regalo): su precio no es el de una ficha de variantes. */
+const PATRON_PROMOCIONAL =
+  /material promocional|bolsa de regalo|caja (?:especial|de regalo)|por la compra|compra especial|\bgratis\b|obsequio/i;
+/** «2 X 1»: el precio es de una promoción, no el de cada variante. */
+const PATRON_DOS_POR_UNO = /^\d\s*x\s*\d$/i;
+/** Cuánto por encima y por debajo de su bloque de precio se mira si la ficha es promocional. */
+const VENTANA_PROMOCIONAL_ARRIBA = 40;
+const VENTANA_PROMOCIONAL_ABAJO = 90;
+/** Hasta dónde, por debajo del precio, se busca el «+» que marca un set. */
+const VENTANA_SET = 200;
+/** Hasta dónde, por debajo del precio, se busca el «P. Normal» del bloque. */
+const DISTANCIA_PRECIO_NORMAL = 40;
+/** Una variante («Tono 1», «Burgundy») es corta: hasta 3 palabras y 40 caracteres. */
+const PALABRAS_MAXIMAS_VARIANTE = 3;
+const LONGITUD_MAXIMA_VARIANTE = 40;
+/** Un título de ficha más largo describe varios productos a la vez: no se antepone a la variante. */
+const LONGITUD_MAXIMA_TITULO = 50;
+const SEPARADOR_FICHA = ' – ';
+
+/** Una línea es el inicio de otro elemento numerado («2. Base Líquida»). */
+function esElementoNumerado(linea: Linea): boolean {
+  return /^\d{1,2}\s*[.)]\s+\S/.test(linea.texto.trim());
+}
+
+/**
+ * Título real de la ficha: el texto pegado por debajo de su bloque de precio
+ * («Jabones Perfumados en Barra»). Se detiene en el primer dato técnico
+ * («Cont. 90 g»), en un código, en otro elemento numerado y en un salto
+ * grande. Devuelve `null` si no hay un título limpio (no se inventa texto).
+ */
+function tituloDeFicha(
+  bloque: Linea,
+  ultimaLineaDelBloque: Linea,
+  lineas: readonly Linea[],
+): string | null {
+  const pila: Linea[] = [];
+  let actual = ultimaLineaDelBloque;
+  let ruido = 0;
+  for (let paso = 0; paso < 12; paso++) {
+    const siguiente = siguienteAbajo(lineas, actual, bloque);
+    if (siguiente === null) {
+      break;
+    }
+    const factor = pila.length === 0 ? FACTOR_SALTO_INICIAL : FACTOR_SALTO;
+    if (siguiente.y1 - actual.y1 > saltoMaximo(actual, siguiente, factor)) {
+      break;
+    }
+    if (
+      siguiente.conCodigo ||
+      esLineaDePagina(siguiente) ||
+      esEtiqueta(siguiente) ||
+      PATRON_ESPECIFICACION.test(siguiente.texto.trim()) ||
+      (pila.length > 0 && esElementoNumerado(siguiente))
+    ) {
+      break;
+    }
+    if (esRuido(siguiente)) {
+      if (pila.length > 0 || ++ruido > 4) {
+        break;
+      }
+      actual = siguiente;
+      continue;
+    }
+    if (pila.length > 0) {
+      const razon = siguiente.altura / Math.max(1, pila[0].altura);
+      if (razon < 0.7 || razon > 1.4) {
+        break;
+      }
+    }
+    pila.push(siguiente);
+    actual = siguiente;
+  }
+  if (pila.length === 0) {
+    return null;
+  }
+  const { nombre, recortado } = aNombreYDescripcion({ lineas: pila });
+  return recortado || !/\p{L}{3}/u.test(nombre) ? null : nombre;
+}
+
+/** Título pegado por **encima** del bloque de precio (el precio va debajo del nombre). */
+function tituloSobreElPrecio(
+  bloque: Linea,
+  lineas: readonly Linea[],
+): string | null {
+  const { lineas: pila } = pilaDeNombre(bloque, bloque, lineas);
+  if (pila.length === 0) {
+    return null;
+  }
+  const { nombre, recortado } = aNombreYDescripcion({ lineas: pila });
+  return recortado || !/\p{L}{3}/u.test(nombre) ? null : nombre;
+}
+
+/**
+ * Herencia del precio de la ficha (D-xx, `PRECIO_HEREDADO`). En muchas páginas
+ * el precio está en el encabezado de la ficha («OFERTA US$ 5.50 c/u») y las
+ * variantes (tonos, aromas) llevan solo su «CÓD.» más abajo. Se hereda SOLO si:
+ * - los códigos sin precio propio existen en la página;
+ * - la página tiene exactamente **un** precio vigente sin dueño (ni de un
+ *   código ni de un producto sin código): con varios candidatos no se sabe
+ *   cuál es;
+ * - ese bloque no es de un artículo promocional (bolsa, caja, «material promocional»);
+ * - el código queda por debajo del bloque.
+ * El resto sigue en `SIN_PRECIO` (RN-13, RN-14).
+ */
+function heredarPrecioDeFicha(
+  candidatos: readonly Candidato[],
+  lineas: readonly Linea[],
+  reclamadas: ReadonlySet<Linea>,
+): Candidato[] {
+  const sinPrecio = candidatos.filter(
+    (c) => c.codigo !== null && c.precio === null,
+  );
+  if (sinPrecio.length === 0) {
+    return [...candidatos];
+  }
+  const anclasDeProducto = new Set(candidatos.map((c) => c.ancla));
+  const hayVecina = (bloque: Linea, patron: RegExp): boolean =>
+    lineas.some(
+      (linea) =>
+        !linea.conCodigo &&
+        mismaColumna(linea, bloque) &&
+        linea.y1 >= bloque.y1 - VENTANA_PROMOCIONAL_ARRIBA &&
+        linea.y1 <= bloque.y1 + VENTANA_PROMOCIONAL_ABAJO &&
+        patron.test(linea.texto.trim()),
+    );
+  // Un artículo promocional con código propio (bolsa, caja) no comparte su precio
+  // con las variantes ni cuenta como «otro» precio de la página.
+  const esArticuloPromocional = (bloque: Linea): boolean =>
+    reclamadas.has(bloque) && hayVecina(bloque, PATRON_PROMOCIONAL);
+  // Todo precio vigente de la página, de cualquier dueño: si hay más de un bloque
+  // no se sabe a cuál pertenece cada variante. Los precios que van en la misma
+  // línea que un «CÓD.» son de ese código y no compiten.
+  const bloques = lineas.filter(
+    (linea) =>
+      !linea.conCodigo &&
+      linea.precios.some((p) => !p.normal) &&
+      !esArticuloPromocional(linea),
+  );
+  const totalPrecios = bloques.reduce(
+    (suma, linea) => suma + linea.precios.filter((p) => !p.normal).length,
+    0,
+  );
+  if (
+    bloques.length !== 1 ||
+    totalPrecios !== 1 ||
+    reclamadas.has(bloques[0]) ||
+    anclasDeProducto.has(bloques[0])
+  ) {
+    return [...candidatos];
+  }
+  const bloque = bloques[0];
+  const vigente = bloque.precios.find((p) => !p.normal);
+  // «2 X 1» o un bloque promocional: el precio no es el de cada variante.
+  if (
+    vigente === undefined ||
+    hayVecina(bloque, PATRON_DOS_POR_UNO) ||
+    hayVecina(bloque, PATRON_PROMOCIONAL)
+  ) {
+    return [...candidatos];
+  }
+
+  // «P. Normal»: en la misma línea o en la que sigue, pegada al precio.
+  const normalEnLinea = bloque.precios.find((p) => p.normal);
+  const lineaNormal = normalEnLinea
+    ? bloque
+    : lineas
+        .filter(
+          (linea) =>
+            !reclamadas.has(linea) &&
+            linea.precios.some((p) => p.normal) &&
+            mismaColumna(linea, bloque) &&
+            linea.y1 > bloque.y1 &&
+            linea.y1 - bloque.y1 <= DISTANCIA_PRECIO_NORMAL,
+        )
+        .toSorted((a, b) => a.y1 - b.y1)[0];
+  const normal =
+    normalEnLinea?.valor ??
+    lineaNormal?.precios.find((p) => p.normal)?.valor ??
+    null;
+  const ultimaLineaDelBloque =
+    lineaNormal !== undefined && lineaNormal.y1 > bloque.y1 ? lineaNormal : bloque;
+  // Un set («Ccori Parfum + Loción + Desodorante») no tiene un título de variante.
+  const esSet = lineas.some(
+    (linea) =>
+      linea.texto.trim() === '+' &&
+      mismaColumna(linea, bloque) &&
+      linea.y1 > bloque.y1 &&
+      linea.y1 <= bloque.y1 + VENTANA_SET,
+  );
+  const titulo = esSet
+    ? null
+    : (tituloDeFicha(bloque, ultimaLineaDelBloque, lineas) ??
+      tituloSobreElPrecio(bloque, lineas));
+
+  return candidatos.map((candidato) => {
+    if (
+      candidato.codigo === null ||
+      candidato.precio !== null ||
+      candidato.ancla.y1 <= bloque.y1
+    ) {
+      return candidato;
+    }
+    return {
+      ...candidato,
+      heredado: true,
+      tituloFicha: titulo,
+      precio: {
+        vigente: vigente.valor,
+        normal,
+        tope: bloque,
+        lineas: [bloque],
+      },
+    };
+  });
+}
+
+/**
+ * «Tono 1» → «Jabones Perfumados en Barra – Tono 1»: solo si el nombre es una
+ * variante corta y el título es el real de la ficha. Si el resultado fuera
+ * demasiado largo, queda el nombre de la variante sin cambios.
+ */
+function nombreConFicha(nombre: string, titulo: string | null | undefined): string {
+  if (titulo === null || titulo === undefined || titulo === '') {
+    return nombre;
+  }
+  const palabras = nombre.split(/\s+/).filter((p) => p !== '');
+  if (
+    [...titulo].length > LONGITUD_MAXIMA_TITULO ||
+    palabras[0]?.toLowerCase() === titulo.split(/\s+/)[0].toLowerCase() ||
+    palabras.length === 0 ||
+    palabras.length > PALABRAS_MAXIMAS_VARIANTE ||
+    [...nombre].length > LONGITUD_MAXIMA_VARIANTE ||
+    titulo.toLowerCase().includes(nombre.toLowerCase()) ||
+    nombre.toLowerCase().includes(titulo.toLowerCase()) ||
+    nombre.startsWith(PREFIJO_NOMBRE_NO_LEIDO)
+  ) {
+    return nombre;
+  }
+  const compuesto = `${titulo}${SEPARADOR_FICHA}${nombre}`;
+  return [...compuesto].length > LONGITUD_MAXIMA_NOMBRE_CONFIABLE
+    ? nombre
+    : compuesto;
 }
 
 function leerPagina(pagina: PaginaTexto): Candidato[] {
@@ -458,7 +741,7 @@ function leerPagina(pagina: PaginaTexto): Candidato[] {
     });
   }
 
-  return candidatos.toSorted(
+  return heredarPrecioDeFicha(candidatos, lineas, reclamadas).toSorted(
     (a, b) => a.ancla.y1 - b.ancla.y1 || a.ancla.x0 - b.ancla.x0,
   );
 }
@@ -479,9 +762,21 @@ export function extraerBorradoresYanbal(
         descripcion,
         recortado,
       } = aNombreYDescripcion(candidato.pila);
-      const nombre = nombreDeBorrador(textoNombre, candidato.codigo);
+      const nombre = nombreDeBorrador(
+        candidato.heredado === true
+          ? nombreConFicha(textoNombre, candidato.tituloFicha)
+          : textoNombre,
+        candidato.codigo,
+      );
       const precio = candidato.precio?.vigente ?? null;
       const precioNormal = candidato.precio?.normal ?? null;
+      const persistentes: ('NOMBRE_DUDOSO' | 'PRECIO_HEREDADO')[] = [];
+      if (recortado) {
+        persistentes.push('NOMBRE_DUDOSO');
+      }
+      if (candidato.heredado === true) {
+        persistentes.push('PRECIO_HEREDADO');
+      }
       resultado.push({
         pagina: pagina.numero,
         posicion,
@@ -495,7 +790,7 @@ export function extraerBorradoresYanbal(
           nombre,
           precio,
           precioNormal,
-          recortado ? ['NOMBRE_DUDOSO'] : [],
+          persistentes,
         ),
       });
     });

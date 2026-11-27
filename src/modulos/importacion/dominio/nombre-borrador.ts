@@ -8,6 +8,23 @@ export const LONGITUD_MAXIMA_NOMBRE = 120;
 /** Longitud máxima de la descripción que propone el lector de Yanbal. */
 export const LONGITUD_MAXIMA_DESCRIPCION_LECTOR = 300;
 
+/** Abreviaturas cuyo punto no termina una oración («largo aprox. 41 cm»). */
+const ABREVIATURA_ANTES_DEL_PUNTO = /\b(?:aprox|máx|mín|etc|cont|núm|dscto|pág|págs|vs)$/i;
+
+/** Posición del primer «.», «!» o «?» que cierra una oración (entre 3 y 80 caracteres), o `null`. */
+function finDePrimeraOracion(texto: string): number | null {
+  for (const coincidencia of texto.matchAll(/[.!?](?=\s|$)/g)) {
+    const indice = coincidencia.index;
+    if (indice > LONGITUD_MAXIMA_NOMBRE_CONFIABLE) {
+      return null;
+    }
+    if (indice >= 3 && !ABREVIATURA_ANTES_DEL_PUNTO.test(texto.slice(0, indice))) {
+      return indice;
+    }
+  }
+  return null;
+}
+
 /**
  * Un texto largo no es un nombre: se corta en la primera oración (si cabe en
  * 80 caracteres) o en la última palabra que cabe, y el resto pasa a la
@@ -21,11 +38,25 @@ export function partirNombreLargo(texto: string): {
   if ([...texto].length <= LONGITUD_MAXIMA_NOMBRE_CONFIABLE) {
     return { nombre: texto, resto: '', recortado: false };
   }
-  const oracion = /^(.{3,80}?[.!?])(?:\s+|$)/su.exec(texto);
-  if (oracion !== null) {
+  const finOracion = finDePrimeraOracion(texto);
+  const parentesis = texto.indexOf('(');
+  // «Colección Verena Collar (largo aprox. 41 a 47 cm…)»: el paréntesis abre
+  // los datos técnicos; el nombre se corta antes, no en el punto de «aprox.».
+  if (
+    parentesis >= 10 &&
+    parentesis <= LONGITUD_MAXIMA_NOMBRE_CONFIABLE &&
+    (finOracion === null || parentesis < finOracion)
+  ) {
     return {
-      nombre: oracion[1].replace(/[.!?]+$/, '').trim(),
-      resto: texto.slice(oracion[0].length).trim(),
+      nombre: texto.slice(0, parentesis).trim(),
+      resto: texto.slice(parentesis).trim(),
+      recortado: true,
+    };
+  }
+  if (finOracion !== null) {
+    return {
+      nombre: texto.slice(0, finOracion).replace(/[.!?]+$/, '').trim(),
+      resto: texto.slice(finOracion + 1).trim(),
       recortado: true,
     };
   }

@@ -12,6 +12,8 @@ import type { ProductosExistentes } from '../puertos/productos-existentes.puerto
 
 export type ErrorResultadoBorrador =
   | 'SIN_PRECIO'
+  /** `PRECIO_HEREDADO` sin confirmar por el Vendedor. */
+  | 'PRECIO_NO_CONFIRMADO'
   | 'MARCA_INACTIVA'
   | 'NO_PENDIENTE'
   | 'NO_ENCONTRADO'
@@ -126,6 +128,11 @@ export class AprobarBorradoresCasoUso {
           }
           if (borrador.precio === null) {
             return fallo('SIN_PRECIO');
+          }
+          // PRECIO_HEREDADO: el precio vino de la ficha; el Vendedor debe confirmarlo
+          // (PATCH con `precio`) antes de aprobar. Ninguna aprobación en bloque lo omite.
+          if (borrador.precioHeredado) {
+            return fallo('PRECIO_NO_CONFIRMADO');
           }
           const marca = await this.marcas.buscarPorId(borrador.marcaId);
           if (marca === null || !marca.activa) {

@@ -262,6 +262,10 @@ propias tablas y ninguna consulta de `productos` lo incluye.
   descripción con sus tallas y colores. Es **aproximado y conservador**: lo que no entiende queda vacío con su
   advertencia (`SIN_PRECIO`, `SIN_CODIGO`, `NOMBRE_DUDOSO`, `CODIGO_REPETIDO`, `YA_IMPORTADO`; informativas:
   `PRECIO_EN_OFERTA`, `VARIAS_REFERENCIAS`). Un borrador sin precio no se aprueba. No se importan imágenes.
+  **Yanbal, precio de ficha:** si una página tiene un único bloque de precio de ficha (sin promoción «2 X 1», sin
+  artículo promocional) y variantes con solo «CÓD.», estas heredan ese precio con `PRECIO_HEREDADO` (exige
+  revisión): no se aprueban, ni en bloque (`PRECIO_NO_CONFIRMADO`), hasta que el Vendedor confirma el precio con
+  `PATCH` de `precio`. El nombre de la variante lleva el título real de la ficha («Base en Polvo – Tono 1»).
 - Los precios son `numeric(7,2)` y viajan como texto (`"35.00"`). El código admite letras y dígitos (hasta 20).
 - Las pruebas usan PDF sintéticos creados en la propia prueba y fragmentos reproducidos a mano; el PDF real de
   referencia (`Contexto/catalogos/`) **no** se versiona.
