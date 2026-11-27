@@ -225,7 +225,8 @@ function leerProducto(
         razon <= 1.4 &&
         linea.y1 - anterior.y1 <= saltoMaximo(linea, anterior)
       ) {
-        nombre = `${nombre} ${texto}`;
+        // Una palabra cortada con guion entre líneas del nombre se recompone.
+        nombre = unirLineas([nombre, texto]);
         continuaciones++;
         anterior = linea;
         continue;

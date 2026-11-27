@@ -273,6 +273,23 @@ describe('RF-PRO-01: perfil Leonisa (páginas de referencia)', () => {
       advertencias: ['SIN_PRECIO'],
     });
   });
+
+  it('una palabra del nombre cortada con guion al final de línea se recompone (catálogo real, campaña 2617)', () => {
+    const [borrador] = extraerBorradoresLeonisa([
+      pagina(21, [
+        l('A. Camiseta con cruce en delan-', 28, 500, 10),
+        l('tero y pechera', 28, 512, 10),
+        l('$18.99', 28, 530, 16),
+        l('Ref. TX900', 28, 560),
+      ]),
+    ]);
+
+    expect(borrador).toMatchObject({
+      nombre: 'Camiseta con cruce en delantero y pechera',
+      codigo: 'TX900',
+      precio: '18.99',
+    });
+  });
 });
 
 describe('RF-PRO-01 / D-55: el perfil se elige por el contenido', () => {
