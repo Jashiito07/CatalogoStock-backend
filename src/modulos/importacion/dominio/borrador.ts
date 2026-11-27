@@ -225,6 +225,14 @@ export class Borrador {
     return this.datos.estado === 'PENDIENTE';
   }
 
+  /**
+   * `true` si el precio se heredó de la ficha (`PRECIO_HEREDADO`): no se puede
+   * aprobar hasta que el Vendedor lo confirme o lo escriba (`PATCH` con `precio`).
+   */
+  get precioHeredado(): boolean {
+    return this.datos.advertencias.includes('PRECIO_HEREDADO');
+  }
+
   /** `true` si falta el precio: no se puede aprobar hasta que el Vendedor lo escriba. */
   get sinPrecio(): boolean {
     return this.datos.precio === null;
@@ -263,7 +271,13 @@ export class Borrador {
     }
     if (cambios.precio !== undefined) {
       const precio = validarPrecio(cambios.precio);
-      if (this.datos.precio === null || !precio.esIgualA(this.datos.precio)) {
+      // `PRECIO_HEREDADO`: enviar el precio, aunque sea el mismo, es la confirmación
+      // explícita del Vendedor (el precio vino de la ficha, no del propio código).
+      if (
+        this.datos.precio === null ||
+        !precio.esIgualA(this.datos.precio) ||
+        this.precioHeredado
+      ) {
         siguiente.precio = precio;
         campos.push('precio');
       }
@@ -287,14 +301,18 @@ export class Borrador {
       return { borrador: this, campos };
     }
     const nombreEditado = campos.includes('nombre');
+    const precioConfirmado = campos.includes('precio');
     siguiente.advertencias = calcularAdvertencias({
       codigo: siguiente.codigo,
       nombre: siguiente.nombre,
       precio: siguiente.precio,
       precioNormal: siguiente.precioNormal,
-      // `NOMBRE_DUDOSO` fijado al leer solo se quita al corregir el nombre.
+      // `NOMBRE_DUDOSO` fijado al leer solo se quita al corregir el nombre y
+      // `PRECIO_HEREDADO`, al confirmar o escribir el precio.
       persistentes: this.datos.advertencias.filter(
-        (advertencia) => !(nombreEditado && advertencia === 'NOMBRE_DUDOSO'),
+        (advertencia) =>
+          !(nombreEditado && advertencia === 'NOMBRE_DUDOSO') &&
+          !(precioConfirmado && advertencia === 'PRECIO_HEREDADO'),
       ),
     });
     siguiente.actualizadoEn = ahora;

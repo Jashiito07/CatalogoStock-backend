@@ -398,6 +398,61 @@ describe('Casos de uso de la importación del catálogo (RF-PRO-01, D-49)', () =
       expect(auditoria.registradas.at(-1)!.actividad.detalle).toMatchObject({ cantidad: 2 });
     });
 
+    it('PRECIO_HEREDADO: no se aprueba (ni «aprobar todo») hasta que el Vendedor confirma el precio con un PATCH; después se aprueba con ese precio', async () => {
+      lector.paginas = [
+        {
+          numero: 61,
+          ancho: 510,
+          alto: 708,
+          bloques: [
+            l('US$ 19.50', 391, 95, 14),
+            l('P. Normal US$ 39.00', 391, 105),
+            l('Full Powder Proof Mate', 391, 125),
+            l('Base en Polvo', 391, 135),
+            l('Tono 1', 51, 674),
+            l('CÓD. 6232', 51, 684),
+            l('Tono 2', 119, 674),
+            l('CÓD. 6233', 119, 684),
+          ],
+        },
+      ];
+      await importar();
+      const heredado = porCodigo('6232')!;
+      expect(heredado.advertencias).toContain('PRECIO_HEREDADO');
+
+      // Aprobación en bloque: ninguno de los dos se aprueba sin confirmar.
+      const bloque = await aprobar.ejecutar({
+        idVendedor: ID_VENDEDOR,
+        ids: idsPendientes(),
+      });
+      expect(bloque).toEqual([
+        { id: heredado.id, error: 'PRECIO_NO_CONFIRMADO' },
+        { id: porCodigo('6233')!.id, error: 'PRECIO_NO_CONFIRMADO' },
+      ]);
+      expect(productos.creados).toHaveLength(0);
+      expect(auditoria.acciones()).not.toContain('BORRADORES_APROBADOS');
+
+      // Confirmar = enviar el precio (aunque sea el mismo): se quita la advertencia.
+      const confirmado = await editar.ejecutar({
+        idVendedor: ID_VENDEDOR,
+        idBorrador: heredado.id,
+        cambios: { precio: '19.50' },
+      });
+      expect(confirmado.advertencias).not.toContain('PRECIO_HEREDADO');
+      const resultado = await aprobar.ejecutar({
+        idVendedor: ID_VENDEDOR,
+        ids: [heredado.id, porCodigo('6233')!.id],
+      });
+      expect(resultado[0]).toMatchObject({ id: heredado.id, estado: 'APROBADO', accion: 'CREADO' });
+      expect(resultado[1]).toEqual({ id: porCodigo('6233')!.id, error: 'PRECIO_NO_CONFIRMADO' });
+      expect(productos.creados).toHaveLength(1);
+      expect(productos.creados[0]).toMatchObject({
+        nombre: 'Full Powder Proof Mate Base en Polvo – Tono 1',
+        codigo: '6232',
+        precio: '19.50',
+      });
+    });
+
     it('un error que no es de dominio no se oculta', async () => {
       await importar();
       const id = porCodigo('43873')!.id;
