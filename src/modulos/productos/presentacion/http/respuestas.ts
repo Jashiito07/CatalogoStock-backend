@@ -6,8 +6,13 @@ import type { ImagenPublica } from '../../dominio/imagen.js';
 /** Imagen del contrato de productos (RF-PRO-01, D-46). */
 export interface RespuestaImagen {
   id: string;
-  /** Ruta pública `/api/v1/imagenes/<uuid>.<ext>`. */
+  /** Ruta pública de la imagen de detalle `/api/v1/imagenes/<uuid>.<ext>`. */
   url: string;
+  /**
+   * Ruta pública de la miniatura `/api/v1/imagenes/<uuid>-m.jpg` (DEC-06); en
+   * imágenes anteriores sin miniatura es igual a `url`.
+   */
+  urlMiniatura: string;
   orden: number;
   principal: boolean;
 }
@@ -19,6 +24,7 @@ export function aRespuestaImagen(imagen: ImagenPublica): RespuestaImagen {
   return {
     id: imagen.id,
     url: `${RUTA_PUBLICA_IMAGENES}/${imagen.nombreArchivo}`,
+    urlMiniatura: `${RUTA_PUBLICA_IMAGENES}/${imagen.nombreMiniatura}`,
     orden: imagen.orden,
     principal: imagen.principal,
   };

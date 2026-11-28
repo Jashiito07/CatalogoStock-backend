@@ -14,6 +14,7 @@ import { SERVICIO_AUDITORIA } from '../src/modulos/auditoria/index.js';
 import { UNIDAD_DE_TRABAJO } from '../src/compartido/aplicacion/unidad-trabajo.puerto.js';
 import { CrearVendedorCasoUso } from '../src/modulos/usuarios/index.js';
 import { type AppPruebas, crearAppPruebas } from './preparacion/app-pruebas.js';
+import { PNG_PRUEBA } from './preparacion/imagenes-prueba.js';
 
 /**
  * e2e de los catálogos mensuales (D-57; contrato `productos-importacion`,
@@ -31,8 +32,8 @@ const CORREO_VENDEDOR = 'vendedor.mensual@ejemplo.test';
 const CORREO_CLIENTE = 'cliente.mensual@ejemplo.test';
 const ID_INEXISTENTE = '00000000-0000-4000-8000-000000000999';
 const RAIZ_ALMACENAMIENTO = resolve(process.env.RUTA_ALMACENAMIENTO ?? '');
-const PNG = Buffer.alloc(64, 0x41);
-Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(PNG);
+/** PNG real: desde D-62 el servidor decodifica cada imagen subida. */
+const PNG = PNG_PRUEBA;
 
 interface CuerpoSesion {
   tokenAcceso: string;

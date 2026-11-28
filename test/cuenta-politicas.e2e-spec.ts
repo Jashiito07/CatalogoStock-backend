@@ -12,6 +12,7 @@ import {
   type AppPruebas,
   crearAppPruebas,
 } from './preparacion/app-pruebas.js';
+import { PNG_PRUEBA } from './preparacion/imagenes-prueba.js';
 
 /**
  * e2e del contrato cuenta-y-politicas (RF-USU-06, RF-USU-07, RF-USU-08, D-60,
@@ -32,8 +33,8 @@ const WHATSAPP_VENDEDOR = '0987000111';
 const WHATSAPP_E164 = '+593987000111';
 const URL_PUBLICA = 'https://catalogostock.ejemplo.test';
 const RAIZ_ALMACENAMIENTO = resolve(process.env.RUTA_ALMACENAMIENTO ?? '');
-const PNG = Buffer.alloc(64, 0x41);
-Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(PNG);
+/** PNG real: desde D-62 el servidor decodifica cada imagen subida. */
+const PNG = PNG_PRUEBA;
 
 const NO_AUTORIZADO = {
   codigo: 'NO_AUTORIZADO',
