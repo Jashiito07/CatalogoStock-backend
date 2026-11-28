@@ -1,6 +1,8 @@
 import { DatosInvalidosError } from '../../../compartido/dominio/errores.js';
 import {
   ArchivoDemasiadoGrandeError,
+  DimensionesNoAdmitidasError,
+  ImagenIlegibleError,
   LimiteImagenesError,
   TipoNoAdmitidoError,
 } from './errores-imagen.js';
@@ -25,6 +27,179 @@ export const CONTENT_TYPE_POR_TIPO: Readonly<Record<TipoImagen, string>> = {
 
 /** Carpeta (dentro de `RUTA_ALMACENAMIENTO`) con las imágenes de productos. */
 export const CARPETA_IMAGENES = 'productos';
+
+/**
+ * DEC-06: toda imagen subida se vuelve a codificar en JPEG (así se quitan los
+ * metadatos EXIF, incluido el GPS del celular) en dos tamaños.
+ */
+export const TIPO_IMAGEN_GUARDADA: TipoImagen = 'jpg';
+/** Lado mayor (px) y calidad JPEG de la imagen de detalle. */
+export const LADO_DETALLE = 800;
+export const CALIDAD_DETALLE = 82;
+/** Lado mayor (px) y calidad JPEG de la miniatura de las listas. */
+export const LADO_MINIATURA = 320;
+export const CALIDAD_MINIATURA = 78;
+
+/** DEC-06: límites de la imagen original, comprobados antes de decodificarla. */
+export const LADO_MAXIMO_ENTRADA = 8000;
+export const PIXELES_MAXIMOS_ENTRADA = 40_000_000;
+
+export interface Dimensiones {
+  ancho: number;
+  alto: number;
+}
+
+const MARCADORES_SOF = new Set([
+  0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
+]);
+
+/** Dimensiones de un JPEG según su segmento SOF (Start Of Frame). */
+function dimensionesJpeg(b: Uint8Array): Dimensiones | null {
+  let i = 2;
+  while (i + 1 < b.length) {
+    if (b[i] !== 0xff) {
+      return null;
+    }
+    // Bytes 0xFF de relleno antes del marcador.
+    while (b[i + 1] === 0xff && i + 2 < b.length) {
+      i++;
+    }
+    const marcador = b[i + 1];
+    i += 2;
+    if (marcador === 0x01 || (marcador >= 0xd0 && marcador <= 0xd8)) {
+      continue; // marcadores sin longitud
+    }
+    if (marcador === 0xd9 || marcador === 0xda || i + 1 >= b.length) {
+      return null; // fin de imagen o inicio de datos sin SOF previo
+    }
+    const longitud = (b[i] << 8) | b[i + 1];
+    if (longitud < 2) {
+      return null;
+    }
+    if (MARCADORES_SOF.has(marcador)) {
+      if (i + 7 > b.length) {
+        return null;
+      }
+      return { alto: (b[i + 3] << 8) | b[i + 4], ancho: (b[i + 5] << 8) | b[i + 6] };
+    }
+    i += longitud;
+  }
+  return null;
+}
+
+function vista(b: Uint8Array): DataView {
+  return new DataView(b.buffer, b.byteOffset, b.byteLength);
+}
+
+function textoEn(b: Uint8Array, desde: number, largo: number): string {
+  return String.fromCharCode(...b.subarray(desde, desde + largo));
+}
+
+/** Dimensiones de un PNG según su bloque IHDR (siempre el primero). */
+function dimensionesPng(b: Uint8Array): Dimensiones | null {
+  if (b.length < 24 || textoEn(b, 12, 4) !== 'IHDR') {
+    return null;
+  }
+  const v = vista(b);
+  return { ancho: v.getUint32(16), alto: v.getUint32(20) };
+}
+
+/** Dimensiones de un WebP con pérdida (VP8), sin pérdida (VP8L) o extendido (VP8X). */
+function dimensionesWebp(b: Uint8Array): Dimensiones | null {
+  if (b.length < 30) {
+    return null;
+  }
+  const v = vista(b);
+  const bloque = textoEn(b, 12, 4);
+  if (bloque === 'VP8 ') {
+    if (b[23] !== 0x9d || b[24] !== 0x01 || b[25] !== 0x2a) {
+      return null;
+    }
+    return {
+      ancho: v.getUint16(26, true) & 0x3fff,
+      alto: v.getUint16(28, true) & 0x3fff,
+    };
+  }
+  if (bloque === 'VP8L') {
+    if (b[20] !== 0x2f) {
+      return null;
+    }
+    const bits = v.getUint32(21, true);
+    return { ancho: (bits & 0x3fff) + 1, alto: ((bits >>> 14) & 0x3fff) + 1 };
+  }
+  if (bloque === 'VP8X') {
+    const ancho = 1 + (b[24] | (b[25] << 8) | (b[26] << 16));
+    const alto = 1 + (b[27] | (b[28] << 8) | (b[29] << 16));
+    return { ancho, alto };
+  }
+  return null;
+}
+
+/**
+ * Lee el ancho y el alto en la cabecera de la imagen, SIN decodificarla
+ * (DEC-06). `null` si la cabecera no se puede leer.
+ */
+export function leerDimensiones(
+  contenido: Uint8Array,
+  tipo: TipoImagen,
+): Dimensiones | null {
+  if (tipo === 'jpg') {
+    return dimensionesJpeg(contenido);
+  }
+  if (tipo === 'png') {
+    return dimensionesPng(contenido);
+  }
+  return dimensionesWebp(contenido);
+}
+
+/**
+ * 422 `DIMENSIONES_NO_ADMITIDAS` si supera 8000 px por lado o 40 megapíxeles;
+ * 415 si alguna dimensión es cero (una cabecera así no es una imagen válida).
+ */
+export function validarDimensiones(dimensiones: Dimensiones): Dimensiones {
+  const { ancho, alto } = dimensiones;
+  if (!(ancho > 0 && alto > 0)) {
+    throw new ImagenIlegibleError();
+  }
+  if (
+    ancho > LADO_MAXIMO_ENTRADA ||
+    alto > LADO_MAXIMO_ENTRADA ||
+    ancho * alto > PIXELES_MAXIMOS_ENTRADA
+  ) {
+    throw new DimensionesNoAdmitidasError();
+  }
+  return dimensiones;
+}
+
+/** Lee la cabecera y valida las dimensiones antes de decodificar (DEC-06). */
+export function exigirDimensionesAdmitidas(
+  contenido: Uint8Array,
+  tipo: TipoImagen,
+): Dimensiones {
+  const dimensiones = leerDimensiones(contenido, tipo);
+  if (dimensiones === null) {
+    throw new ImagenIlegibleError();
+  }
+  return validarDimensiones(dimensiones);
+}
+
+/**
+ * Tamaño reducido para que el lado mayor no pase de `ladoMaximo`, manteniendo
+ * la proporción. Nunca agranda una imagen pequeña.
+ */
+export function tamanioAjustado(
+  dimensiones: Dimensiones,
+  ladoMaximo: number,
+): Dimensiones {
+  const escala = Math.min(
+    1,
+    ladoMaximo / Math.max(dimensiones.ancho, dimensiones.alto),
+  );
+  return {
+    ancho: Math.max(1, Math.round(dimensiones.ancho * escala)),
+    alto: Math.max(1, Math.round(dimensiones.alto * escala)),
+  };
+}
 
 const FIRMA_JPEG = [0xff, 0xd8, 0xff];
 const FIRMA_PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -91,9 +266,17 @@ export function nombreDeArchivo(id: string, tipo: TipoImagen): string {
   return `${id}.${tipo}`;
 }
 
-/** Nombre público válido: UUID en minúsculas y extensión admitida (sin rutas). */
+/** Nombre público de la miniatura: `<uuid>-m.<ext>` (DEC-06). */
+export function nombreDeMiniatura(id: string, tipo: TipoImagen): string {
+  return `${id}-m.${tipo}`;
+}
+
+/**
+ * Nombre público válido: UUID en minúsculas, `-m` opcional (miniatura) y
+ * extensión admitida (sin rutas).
+ */
 export const FORMATO_NOMBRE_ARCHIVO =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(-m)?\.(jpg|png|webp)$/;
 
 /** Tipo de un nombre público válido, o `null` si el nombre no cumple el formato. */
 export function tipoDeNombreDeArchivo(nombre: string): TipoImagen | null {
@@ -109,7 +292,13 @@ export interface DatosImagen {
   /** Posición (0 = principal). */
   orden: number;
   tipo: TipoImagen;
+  /** Tamaño en bytes de la imagen de detalle. */
   tamanioBytes: number;
+  /** Dimensiones de la imagen de detalle; `null` en imágenes anteriores a DEC-06. */
+  ancho: number | null;
+  alto: number | null;
+  /** `false` en las imágenes anteriores a DEC-06, que no tienen miniatura. */
+  conMiniatura: boolean;
   creadaEn: Date;
 }
 
@@ -118,6 +307,8 @@ export interface ImagenPublica {
   id: string;
   productoId: string;
   nombreArchivo: string;
+  /** Miniatura; si la imagen no tiene, es la misma imagen de detalle. */
+  nombreMiniatura: string;
   orden: number;
   /** `true` solo en la de `orden` 0. */
   principal: boolean;
@@ -146,15 +337,42 @@ export class Imagen {
   get tamanioBytes(): number {
     return this.datos.tamanioBytes;
   }
+  get ancho(): number | null {
+    return this.datos.ancho;
+  }
+  get alto(): number | null {
+    return this.datos.alto;
+  }
+  get conMiniatura(): boolean {
+    return this.datos.conMiniatura;
+  }
   get creadaEn(): Date {
     return this.datos.creadaEn;
   }
   get nombreArchivo(): string {
     return nombreDeArchivo(this.datos.id, this.datos.tipo);
   }
+  /** Nombre de la miniatura, o `null` si la imagen no tiene (anterior a DEC-06). */
+  get nombreMiniatura(): string | null {
+    return this.datos.conMiniatura
+      ? nombreDeMiniatura(this.datos.id, this.datos.tipo)
+      : null;
+  }
+  /** Todos los archivos de la imagen: detalle y, si tiene, miniatura. */
+  get nombresArchivos(): string[] {
+    const miniatura = this.nombreMiniatura;
+    return miniatura === null
+      ? [this.nombreArchivo]
+      : [this.nombreArchivo, miniatura];
+  }
   /** Ruta relativa a `RUTA_ALMACENAMIENTO` (nunca la ruta completa del servidor). */
   get rutaRelativa(): string {
     return `${CARPETA_IMAGENES}/${this.nombreArchivo}`;
+  }
+  /** Ruta relativa de la miniatura, o `null` si no tiene. */
+  get rutaMiniatura(): string | null {
+    const miniatura = this.nombreMiniatura;
+    return miniatura === null ? null : `${CARPETA_IMAGENES}/${miniatura}`;
   }
 
   conOrden(orden: number): Imagen {
@@ -166,6 +384,7 @@ export class Imagen {
       id: this.datos.id,
       productoId: this.datos.productoId,
       nombreArchivo: this.nombreArchivo,
+      nombreMiniatura: this.nombreMiniatura ?? this.nombreArchivo,
       orden: this.datos.orden,
       principal: this.datos.orden === 0,
     };

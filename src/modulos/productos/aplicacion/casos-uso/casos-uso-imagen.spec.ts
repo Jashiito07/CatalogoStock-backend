@@ -14,7 +14,10 @@ import {
 } from './dobles.prueba-spec.js';
 import {
   AlmacenImagenesEnMemoria,
+  cabeceraJpg,
+  cabeceraPng,
   ImagenRepositorioEnMemoria,
+  ProcesadorImagenesFalso,
 } from './dobles-imagen.prueba-spec.js';
 import { EliminarImagenCasoUso } from './eliminar-imagen.caso-uso.js';
 import { ObtenerArchivoImagenCasoUso } from './obtener-archivo-imagen.caso-uso.js';
@@ -29,8 +32,10 @@ function conFirma(firma: number[], tamanio = 64): Uint8Array {
   contenido.set(firma);
   return contenido;
 }
-const PNG = () => conFirma([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const JPG = () => conFirma([0xff, 0xd8, 0xff, 0xe0]);
+/** Cabeceras válidas: el procesador falso no decodifica (DEC-06). */
+const PNG = () => cabeceraPng();
+const JPG = () => cabeceraJpg();
+const texto = (valor: string) => new TextEncoder().encode(valor);
 
 function producto(id: string): Producto {
   return Producto.reconstituir({
@@ -51,6 +56,7 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
   let productos: ProductoRepositorioEnMemoria;
   let imagenes: ImagenRepositorioEnMemoria;
   let almacen: AlmacenImagenesEnMemoria;
+  let procesador: ProcesadorImagenesFalso;
   let unidad: UnidadDeTrabajoFalsa;
   let auditoria: AuditoriaFalsa;
   let agregar: AgregarImagenCasoUso;
@@ -65,12 +71,14 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
     await productos.crear(producto(ID_OTRO_PRODUCTO));
     imagenes = new ImagenRepositorioEnMemoria();
     almacen = new AlmacenImagenesEnMemoria();
+    procesador = new ProcesadorImagenesFalso();
     unidad = new UnidadDeTrabajoFalsa();
     auditoria = new AuditoriaFalsa(unidad);
     agregar = new AgregarImagenCasoUso(
       productos,
       imagenes,
       almacen,
+      procesador,
       generadorIdSecuencial(),
       new RelojFalso(),
       unidad,
@@ -92,20 +100,36 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
     agregar.ejecutar({ idVendedor: ID_VENDEDOR, idProducto, contenido });
 
   describe('agregar', () => {
-    it('la primera imagen es la principal; las siguientes siguen en orden', async () => {
+    it('la primera imagen es la principal; las siguientes siguen en orden; todas se guardan en JPEG (DEC-06)', async () => {
       const a = await subir(JPG());
       const b = await subir(PNG());
 
       expect(a).toMatchObject({ orden: 0, principal: true });
       expect(a.nombreArchivo.endsWith('.jpg')).toBe(true);
       expect(b).toMatchObject({ orden: 1, principal: false });
-      expect(b.nombreArchivo.endsWith('.png')).toBe(true);
+      expect(b.nombreArchivo.endsWith('.jpg')).toBe(true);
+      expect(b.nombreMiniatura).toBe(b.nombreArchivo.replace('.jpg', '-m.jpg'));
     });
 
-    it('guarda el archivo con el nombre generado y registra IMAGEN_AGREGADA en la misma transacción', async () => {
+    it('guarda el detalle y la miniatura procesados (nunca el original) y registra IMAGEN_AGREGADA en la misma transacción', async () => {
       const a = await subir();
 
-      expect([...almacen.archivos.keys()]).toEqual([a.nombreArchivo]);
+      expect([...almacen.archivos.keys()]).toEqual([
+        a.nombreArchivo,
+        a.nombreMiniatura,
+      ]);
+      expect(almacen.archivos.get(a.nombreArchivo)).toEqual(texto('detalle-1'));
+      expect(almacen.archivos.get(a.nombreMiniatura)).toEqual(
+        texto('miniatura-1'),
+      );
+      const [guardada] = imagenes.imagenes;
+      expect(guardada).toMatchObject({
+        tipo: 'jpg',
+        ancho: 800,
+        alto: 600,
+        conMiniatura: true,
+        tamanioBytes: texto('detalle-1').length,
+      });
       expect(auditoria.registradas).toHaveLength(1);
       expect(auditoria.registradas[0].enTransaccion).toBe(true);
       expect(auditoria.registradas[0].actividad).toEqual({
@@ -127,6 +151,35 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
       expect(auditoria.registradas).toHaveLength(0);
     });
 
+    it('DEC-06: más de 8000 px o de 40 MP en la cabecera → DIMENSIONES_NO_ADMITIDAS sin llegar a decodificar', async () => {
+      for (const grande of [cabeceraPng(9000, 10), cabeceraJpg(7000, 7000)]) {
+        await expect(subir(grande)).rejects.toMatchObject({
+          codigo: 'DIMENSIONES_NO_ADMITIDAS',
+        });
+      }
+      expect(procesador.llamadas).toBe(0);
+      expect(almacen.archivos.size).toBe(0);
+    });
+
+    it('DEC-06: firma correcta pero cabecera ilegible → TIPO_NO_ADMITIDO sin decodificar', async () => {
+      await expect(
+        subir(conFirma([0xff, 0xd8, 0xff, 0xe0])),
+      ).rejects.toMatchObject({ codigo: 'TIPO_NO_ADMITIDO' });
+      expect(procesador.llamadas).toBe(0);
+    });
+
+    it('DEC-06: si la imagen no se puede decodificar → TIPO_NO_ADMITIDO y no queda fila, bitácora ni archivo', async () => {
+      procesador.ilegible = true;
+
+      await expect(subir()).rejects.toMatchObject({
+        codigo: 'TIPO_NO_ADMITIDO',
+      });
+
+      expect(imagenes.imagenes).toHaveLength(0);
+      expect(auditoria.registradas).toHaveLength(0);
+      expect(almacen.archivos.size).toBe(0);
+    });
+
     it('más de 2 MB → ARCHIVO_DEMASIADO_GRANDE', async () => {
       const grande = conFirma(
         [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
@@ -146,7 +199,9 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
         codigo: 'LIMITE_IMAGENES',
       });
       expect(imagenes.imagenes).toHaveLength(5);
-      expect(almacen.archivos.size).toBe(5);
+      expect(almacen.archivos.size).toBe(10);
+      // El cupo se revisa antes de procesar: la sexta no gasta CPU.
+      expect(procesador.llamadas).toBe(5);
     });
 
     it('el límite es por producto: otro producto admite sus 5', async () => {
@@ -178,6 +233,7 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
         productos,
         imagenes,
         almacen,
+        procesador,
         generadorIdSecuencial(),
         new RelojFalso(),
         cierreFallido,
@@ -207,6 +263,12 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
     it('si falla la escritura del archivo, falla la operación sin dejar archivo', async () => {
       almacen.falloAlGuardar = new Error('disco lleno');
       await expect(subir()).rejects.toThrow('disco lleno');
+      expect(almacen.archivos.size).toBe(0);
+    });
+
+    it('si falla la escritura de la miniatura, también se borra el detalle ya escrito', async () => {
+      almacen.fallarSi = (nombre) => nombre.endsWith('-m.jpg');
+      await expect(subir()).rejects.toThrow('no se pudo guardar');
       expect(almacen.archivos.size).toBe(0);
     });
   });
@@ -270,7 +332,11 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
         idImagen: a.id,
       });
 
-      expect([...almacen.archivos.keys()]).toEqual([b.nombreArchivo]);
+      // Se borran el detalle y la miniatura de la eliminada (DEC-06).
+      expect([...almacen.archivos.keys()]).toEqual([
+        b.nombreArchivo,
+        b.nombreMiniatura,
+      ]);
       const restantes = await imagenes.listarPorProducto(ID_PRODUCTO);
       expect(restantes.map((i) => [i.id, i.orden])).toEqual([[b.id, 0]]);
       expect(auditoria.registradas).toHaveLength(1);
@@ -296,6 +362,7 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
       ).rejects.toThrow('bitácora caída');
 
       expect(almacen.archivos.has(a.nombreArchivo)).toBe(true);
+      expect(almacen.archivos.has(a.nombreMiniatura)).toBe(true);
     });
 
     it('imagen inexistente, de otro producto o producto inexistente → NO_ENCONTRADO', async () => {
@@ -311,7 +378,7 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
           eliminar.ejecutar({ idVendedor: ID_VENDEDOR, idProducto, idImagen }),
         ).rejects.toMatchObject({ codigo: 'NO_ENCONTRADO' });
       }
-      expect(almacen.archivos.size).toBe(2);
+      expect(almacen.archivos.size).toBe(4);
     });
   });
 
@@ -335,12 +402,16 @@ describe('Casos de uso de imágenes de productos (RF-PRO-01, D-46)', () => {
       expect((await consultar.porProductos([])).size).toBe(0);
     });
 
-    it('servir devuelve el contenido y el tipo; un nombre inválido o inexistente → NO_ENCONTRADO', async () => {
+    it('servir devuelve el detalle y la miniatura con su tipo; un nombre inválido o inexistente → NO_ENCONTRADO', async () => {
       const a = await subir(JPG());
 
       const archivo = await servir.ejecutar(a.nombreArchivo);
       expect(archivo.tipo).toBe('jpg');
-      expect(archivo.contenido).toEqual(JPG());
+      expect(archivo.contenido).toEqual(texto('detalle-1'));
+      expect(await servir.ejecutar(a.nombreMiniatura)).toEqual({
+        tipo: 'jpg',
+        contenido: texto('miniatura-1'),
+      });
 
       for (const nombre of [
         '../secreto.jpg',

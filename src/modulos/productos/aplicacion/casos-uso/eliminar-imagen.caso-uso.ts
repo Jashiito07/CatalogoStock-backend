@@ -17,9 +17,9 @@ export interface DatosEliminarImagen {
 /**
  * Elimina una imagen (RF-PRO-01, D-46): borra la fila, reasigna posiciones (la
  * siguiente pasa a ser la principal si se quitó la principal) y registra
- * `IMAGEN_ELIMINADA` en la misma transacción. El archivo se borra del disco
- * **después** de confirmar la transacción, para no perder el archivo si esta
- * falla. (La eliminación lógica del producto, en cambio, conserva sus imágenes.)
+ * `IMAGEN_ELIMINADA` en la misma transacción. Los archivos (detalle y
+ * miniatura) se borran del disco **después** de confirmar la transacción, para
+ * no perderlos si esta falla. (La eliminación lógica del producto, en cambio, conserva sus imágenes.)
  */
 export class EliminarImagenCasoUso {
   constructor(
@@ -31,7 +31,7 @@ export class EliminarImagenCasoUso {
   ) {}
 
   async ejecutar(datos: DatosEliminarImagen): Promise<void> {
-    const nombreArchivo = await this.unidadTrabajo.ejecutar(async () => {
+    const archivos = await this.unidadTrabajo.ejecutar(async () => {
       const producto = await this.productos.bloquearPorId(datos.idProducto);
       // D-60: el producto de otro Vendedor responde 404.
       if (producto === null || !producto.perteneceA(datos.idVendedor)) {
@@ -50,8 +50,11 @@ export class EliminarImagenCasoUso {
         idEntidad: producto.id,
         detalle: { idImagen: imagen.id },
       });
-      return imagen.nombreArchivo;
+      return imagen.nombresArchivos;
     });
-    await this.almacen.eliminar(nombreArchivo);
+    // Detalle y, si la tiene, miniatura (DEC-06).
+    for (const nombre of archivos) {
+      await this.almacen.eliminar(nombre);
+    }
   }
 }

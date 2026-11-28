@@ -16,7 +16,9 @@ import { type TipoImagen } from '../../dominio/imagen.js';
  * - `ruta_relativa`: `productos/<uuid>.<ext>` relativa a `RUTA_ALMACENAMIENTO`;
  *   nunca la ruta completa del servidor.
  * - `tipo`: `jpg`, `png` o `webp`, detectado por contenido.
- * - `tamanio_bytes`: de 1 a 2 097 152 (2 MB).
+ * - `tamanio_bytes`: de 1 a 2 097 152 (2 MB); el de la imagen de detalle.
+ * - `ruta_miniatura`, `ancho` y `alto` (DEC-05, DEC-06; migración
+ *   AgregarMiniaturaImagenesProducto): `NULL` en las imágenes anteriores.
  * - La clave foránea a `productos` no borra en cascada: los productos solo se
  *   eliminan de forma lógica (PA-07) y sus imágenes se conservan.
  */
@@ -26,6 +28,11 @@ import { type TipoImagen } from '../../dominio/imagen.js';
 })
 @Index('ix_imagenes_producto_producto_orden', ['idProducto', 'orden'])
 @Index('uq_imagenes_producto_ruta', ['rutaRelativa'], { unique: true })
+@Index('uq_imagenes_producto_ruta_miniatura', ['rutaMiniatura'], {
+  unique: true,
+})
+@Check('ck_imagenes_producto_ancho', 'ancho IS NULL OR ancho > 0')
+@Check('ck_imagenes_producto_alto', 'alto IS NULL OR alto > 0')
 @Check('ck_imagenes_producto_orden', 'orden >= 0')
 @Check('ck_imagenes_producto_tipo', `tipo IN ('jpg', 'png', 'webp')`)
 @Check(
@@ -53,6 +60,20 @@ export class ImagenOrmEntity {
 
   @Column({ name: 'tamanio_bytes', type: 'integer' })
   tamanioBytes: number;
+
+  @Column({
+    name: 'ruta_miniatura',
+    type: 'varchar',
+    length: 80,
+    nullable: true,
+  })
+  rutaMiniatura: string | null;
+
+  @Column({ type: 'integer', nullable: true })
+  ancho: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  alto: number | null;
 
   @Column({
     name: 'fecha_creacion',

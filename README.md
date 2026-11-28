@@ -138,7 +138,8 @@ Migraciones actuales: `CrearTablaUsuarios` (1.2), `CrearTablaSesiones` (1.3),
 `PERFIL_VENDEDOR_ACTUALIZADO`) y `AgregarIdVendedorProductosEImportaciones` (D-60: `id_vendedor` en
 `productos` e `importaciones_producto`, relleno con el único Vendedor; falla con un mensaje claro si hay
 filas y no hay Vendedor). Ambas son aditivas y con `down()`; la primera no se revierte si ya hay cuentas
-eliminadas.
+eliminadas. `AgregarMiniaturaImagenesProducto` (D-62) agrega a `imagenes_producto` las columnas
+`ruta_miniatura`, `ancho` y `alto`, que admiten `NULL`; es aditiva y tiene `down()`.
 
 ## Cuenta, políticas y perfil comercial (RF-USU-06 a RF-USU-08, D-60, PA-21)
 
@@ -214,20 +215,29 @@ Contrato en `docs/contrato-api/productos.md` («Endpoints: imágenes»).
 
 | Ruta | Acceso |
 |---|---|
-| `POST /api/v1/productos/{id}/imagenes` | Vendedor; `multipart/form-data` con el campo `archivo`; 201 con la **Imagen**. 400 sin archivo, 404 producto, 413 más de 2 MB, 415 no es JPG/PNG/WebP, 422 `LIMITE_IMAGENES` (5). 30 subidas por minuto por IP |
+| `POST /api/v1/productos/{id}/imagenes` | Vendedor; `multipart/form-data` con el campo `archivo`; 201 con la **Imagen** (`url` y `urlMiniatura`). 400 sin archivo, 404 producto, 413 más de 2 MB, 415 no es JPG/PNG/WebP o está dañada, 422 `DIMENSIONES_NO_ADMITIDAS` (más de 8000 px por lado o 40 MP), 422 `LIMITE_IMAGENES` (5). 30 subidas por minuto por IP |
 | `PUT /api/v1/productos/{id}/imagenes/orden` | Vendedor; cuerpo `{ "ids": [...] }` con **todas** las imágenes en el nuevo orden (la primera es la principal); 200 con la lista, 400 si faltan, sobran o se repiten ids |
-| `DELETE /api/v1/productos/{id}/imagenes/{imagenId}` | Vendedor; 204, borra la fila y el archivo y reasigna la principal; 404 |
-| `GET /api/v1/imagenes/{archivo}` | **Público** (D-46); solo `<uuid>.(jpg\|png\|webp)`, con `Cache-Control` inmutable y `nosniff`; cualquier otro nombre responde 404 |
+| `DELETE /api/v1/productos/{id}/imagenes/{imagenId}` | Vendedor; 204, borra la fila, el detalle y la miniatura y reasigna la principal; 404 |
+| `GET /api/v1/imagenes/{archivo}` | **Público** (D-46); solo `<uuid>(-m).(jpg\|png\|webp)`, con `Cache-Control` inmutable y `nosniff`; cualquier otro nombre responde 404 |
 
 - Límites: máximo 5 imágenes por producto, 2 MB cada una, JPG, PNG o WebP. El tipo se decide por los
   **primeros bytes** del archivo (no por la extensión ni el `Content-Type` del cliente) y el nombre en
   disco es un UUID generado por el servidor (nunca el original).
+- **Dos tamaños (D-62).**
+  - Antes de decodificar, se leen las dimensiones en la cabecera: como máximo 8000 px por lado y 40 MP.
+  - La imagen se **vuelve a codificar** con `@napi-rs/canvas` en JPEG: `<uuid>.jpg` (detalle, lado mayor de
+    800 px, calidad 82) y `<uuid>-m.jpg` (miniatura, 320 px, calidad 78).
+  - La nueva codificación aplica la orientación de la foto y **no conserva metadatos** (EXIF, GPS).
+  - El original nunca se guarda.
+  - Como máximo se procesan 2 imágenes a la vez, para limitar la memoria.
 - **Carpeta de archivos**: variable `RUTA_ALMACENAMIENTO` (por defecto `./almacenamiento`, en `.gitignore`).
-  Las imágenes van en `<RUTA_ALMACENAMIENTO>/productos/<uuid>.<ext>`. En producción apúntela a una carpeta
+  Las imágenes van en `<RUTA_ALMACENAMIENTO>/productos/`. En producción apúntela a una carpeta
   fuera del código, escribible solo por la API e incluida en las copias de seguridad.
-- Tabla `imagenes_producto` (migración `CrearTablaImagenesProducto`): `orden` (0 = principal), `ruta_relativa`
-  única, `tipo`, `tamanio_bytes`. La eliminación lógica del producto **no** borra sus imágenes; eliminar una
-  imagen borra la fila y, tras confirmar la transacción, el archivo.
+- Tabla `imagenes_producto` (migraciones `CrearTablaImagenesProducto` y `AgregarMiniaturaImagenesProducto`):
+  `orden` (0 = principal), `ruta_relativa` única, `tipo`, `tamanio_bytes`, `ruta_miniatura`, `ancho` y `alto`
+  (estas tres son `NULL` en las imágenes anteriores a D-62, que se siguen sirviendo). La eliminación lógica del
+  producto **no** borra sus imágenes; eliminar una imagen borra la fila y, tras confirmar la transacción, sus
+  archivos.
 - Las altas bloquean la fila del producto (`FOR UPDATE`): dos subidas simultáneas nunca superan las 5.
 - Bitácora en la misma transacción: `IMAGEN_AGREGADA` e `IMAGEN_ELIMINADA` (solo `idImagen`, sin rutas).
 

@@ -26,6 +26,35 @@ export class TipoNoAdmitidoError extends ContenidoNoAdmitidoError {
   }
 }
 
+/**
+ * La firma es de JPG, PNG o WebP pero el contenido no se puede leer (cabecera
+ * rota o datos dañados). Mismo código que un tipo no admitido (415), para que
+ * el panel lo trate igual, con un mensaje propio.
+ */
+export class ImagenIlegibleError extends ContenidoNoAdmitidoError {
+  constructor() {
+    super(
+      'TIPO_NO_ADMITIDO',
+      'No se pudo leer la imagen: debe ser un JPG, PNG o WebP válido.',
+    );
+  }
+}
+
+/**
+ * DEC-06: la imagen supera 8000 px por lado o 40 megapíxeles (422
+ * `DIMENSIONES_NO_ADMITIDAS`). Se comprueba en la cabecera, antes de
+ * decodificar, para que una imagen pequeña en bytes pero enorme en píxeles no
+ * agote la memoria del servidor.
+ */
+export class DimensionesNoAdmitidasError extends ReglaNegocioError {
+  constructor() {
+    super(
+      'DIMENSIONES_NO_ADMITIDAS',
+      'La imagen no puede superar 8000 px por lado ni 40 megapíxeles.',
+    );
+  }
+}
+
 /** El producto ya tiene 5 imágenes (422 `LIMITE_IMAGENES`, D-46). */
 export class LimiteImagenesError extends ReglaNegocioError {
   constructor() {

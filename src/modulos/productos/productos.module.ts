@@ -44,11 +44,16 @@ import {
   type DirectorioMarcas,
 } from './aplicacion/puertos/directorio-marcas.puerto.js';
 import {
+  PROCESADOR_IMAGENES,
+  type ProcesadorImagenes,
+} from './aplicacion/puertos/procesador-imagenes.puerto.js';
+import {
   PRODUCTO_REPOSITORIO,
   type ProductoRepositorio,
 } from './aplicacion/puertos/producto.repositorio.js';
 import { DirectorioMarcasModuloMarcas } from './infraestructura/marcas/directorio-marcas.modulo-marcas.js';
 import { AlmacenImagenesDisco } from './infraestructura/almacenamiento/almacen-imagenes.disco.js';
+import { ProcesadorImagenesCanvas } from './infraestructura/imagenes/procesador-imagenes.canvas.js';
 import { ImagenOrmEntity } from './infraestructura/persistencia/imagen.orm-entity.js';
 import { ImagenRepositorioTypeorm } from './infraestructura/persistencia/imagen.repositorio.typeorm.js';
 import { ProductoOrmEntity } from './infraestructura/persistencia/producto.orm-entity.js';
@@ -79,6 +84,11 @@ import { ProductosController } from './presentacion/http/productos.controller.js
         new AlmacenImagenesDisco(
           configuracion.get('RUTA_ALMACENAMIENTO', { infer: true }),
         ),
+    },
+    // DEC-06: detalle y miniatura en JPEG, sin EXIF (como máximo 2 a la vez).
+    {
+      provide: PROCESADOR_IMAGENES,
+      useFactory: () => new ProcesadorImagenesCanvas(2),
     },
     { provide: GENERADOR_ID, useClass: GeneradorIdUuid },
     { provide: RELOJ, useClass: RelojSistema },
@@ -180,6 +190,7 @@ import { ProductosController } from './presentacion/http/productos.controller.js
         PRODUCTO_REPOSITORIO,
         IMAGEN_REPOSITORIO,
         ALMACEN_IMAGENES,
+        PROCESADOR_IMAGENES,
         GENERADOR_ID,
         RELOJ,
         UNIDAD_DE_TRABAJO,
@@ -189,6 +200,7 @@ import { ProductosController } from './presentacion/http/productos.controller.js
         productos: ProductoRepositorio,
         imagenes: ImagenRepositorio,
         almacen: AlmacenImagenes,
+        procesador: ProcesadorImagenes,
         generadorId: GeneradorId,
         reloj: Reloj,
         unidadTrabajo: UnidadDeTrabajo,
@@ -198,6 +210,7 @@ import { ProductosController } from './presentacion/http/productos.controller.js
           productos,
           imagenes,
           almacen,
+          procesador,
           generadorId,
           reloj,
           unidadTrabajo,

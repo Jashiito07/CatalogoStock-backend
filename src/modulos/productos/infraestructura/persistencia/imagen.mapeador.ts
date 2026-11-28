@@ -10,6 +10,10 @@ export const ImagenMapeador = {
       orden: fila.orden,
       tipo: fila.tipo,
       tamanioBytes: fila.tamanioBytes,
+      ancho: fila.ancho ?? null,
+      alto: fila.alto ?? null,
+      // DEC-06: las imágenes anteriores no tienen miniatura.
+      conMiniatura: fila.rutaMiniatura != null,
       creadaEn: fila.fechaCreacion,
     });
   },
@@ -22,6 +26,9 @@ export const ImagenMapeador = {
     fila.rutaRelativa = imagen.rutaRelativa;
     fila.tipo = imagen.tipo;
     fila.tamanioBytes = imagen.tamanioBytes;
+    fila.rutaMiniatura = imagen.rutaMiniatura;
+    fila.ancho = imagen.ancho;
+    fila.alto = imagen.alto;
     fila.fechaCreacion = imagen.creadaEn;
     return fila;
   },
